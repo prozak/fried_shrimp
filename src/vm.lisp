@@ -24,7 +24,19 @@
 (set-macro-character #\@ (lambda (stream char)
                             (list 'make-combinator ':spec (read stream t nil t))))
 
+; raised for 'errors' specified in the doc
+(define-condition game-logic-error (error) ())
+
+(defmacro in-game-check (condition &optional comment &rest comment-params)
+    `(unless ,condition
+        (format t "BANG: in game check ~A failed~A" ',condition (if ,comment ": " ""))
+        (when ,comment
+            (format t ,comment ,@comment-params))
+        (format t "~%")
+        (error 'game-logic-error)))
+
 (defun cb-call (combinator param)
+    (in-game-check (typep combinator 'combinator) "in call to cb-call")
     (push param (cb-params combinator))
     (let* ((spec                (cb-spec combinator))
            (params              (cb-params combinator))
@@ -94,37 +106,37 @@
 (defvar *opponent*  (make-player))
 
 (defun get-slot (player slot-number)
+    (in-game-check (valid-slot-number? slot-number) "in call to get-slot, slot-number is ~A" slot-number)
     ;;(format t "gs: slots are: ~A~%" (player-slots player))
     (aref (player-slots player) slot-number))
 
 (defmacro with-slot ((name player number) &body body)
     `(progn
         ;;(format t "ws: slot number ~A~%" ,number)
-        (assert (valid-slot-number? ,number))
         (let ((,name (get-slot ,player ,number)))
             ;;(format t "ws: got slot: ~A~%" ,name)
             ,@body)))
 
 (defmacro with-alive-slot ((name player number) &body body)
     `(with-slot (,name ,player ,number)
-        (assert (alive? ,name))
+        (in-game-check (alive? ,name) "in call to with-alive-slot")
         ,@body))
 
 (defcombinator zero (x) 0)
 
 (defcombinator succ (n)
-    (assert (integerp n))
+    (in-game-check (integerp n) "in call to succ, n is ~A" n)
     (if (< n *max-live*)
         (1+ n)
         *max-live*))
 
 (defcombinator dbl (n)
-    (assert (integerp n))
+    (in-game-check (integerp n) "in call to dbl, n is ~A" n)
     (if (< n (/ *max-live* 2))
         (* 2 n)
         *max-live*))
 
-(defcombinator get-f (i)
+(defcombinator get (i)
     (with-alive-slot (slot *proponent* i)
         (slot-field slot)))
 
@@ -157,7 +169,7 @@
 (defcombinator attack (i j n)
     (with-slot (my-slot *proponent* i)
         (let ((v (slot-vitality my-slot)))
-            (assert (<= n v))
+            (in-game-check (and (integerp n) (<= n v)) "in call to attack, n is ~A, v is ~A" n v)
             (setf (slot-vitality my-slot) (- v n))
             (with-slot (his-slot *opponent* (wrap-slot j))
                 (when (alive? his-slot)
@@ -171,7 +183,7 @@
 (defcombinator help (i j n)
     (with-slot (slot-i *proponent* i)
         (let ((v (slot-vitality slot-i)))
-            (assert (<= n v))
+            (in-game-check (and (integerp n) (<= n v)) "in call to help, n is ~A, v is ~A" n v)
             (whith-slot (slot-j *proponent* j)
                 (when (alive? slot-j)
                     (let ((w (+ (slot-vitality slot-j) (truncate (/ (* n 11) 10)))))
@@ -192,20 +204,37 @@
 
 (defcombinator zombie (i x)
     (with-slot (slot *opponent* (wrap-slot i))
-        (assert (dead? slot))
+        (in-game-check (dead? slot) "in call to zombie, i is ~A" i)
         (setf (slot-field slot) x)
         (setf (slot-vitality slot) -1))
     @I)
 
+;; TODO: 1000 applications check
+
 (defun left-application (player card slot-number)
-    (format t "la: ~A -> ~A~%" card slot-number)
-    (with-alive-slot (slot player slot-number)
-        (setf (slot-field slot) (cb-call card (slot-field slot)))))
+    ;;(format t "la: ~A -> ~A~%" card slot-number)
+    (when (valid-slot-number? slot-number)                  ;TODO: what todo if it is not valid?
+        (handler-case 
+                (with-alive-slot (slot player slot-number)  ; note: as a side effect of this dead slots could be set to I
+                    (setf (slot-field slot) (cb-call card (slot-field slot))))
+            (game-logic-error (_) (setf (slot-field (get-slot player slot-number)) @I)))))
 
 (defun right-application (player slot-number card)
-    (with-alive-slot (slot player slot-number)
-        (assert (functionp (slot-field slot)))
-        (setf (slot-field slot) (cb-call (slot-field slot) card))))
+    (when (valid-slot-number? slot-number)                  ;TODO: what todo if it is not valid?
+        (handler-case 
+                (with-alive-slot (slot player slot-number)  ; note: as a side effect of this dead slots could be set to I
+                    (setf (slot-field slot) (cb-call (slot-field slot) card)))
+            (game-logic-error (_) (setf (slot-field (get-slot player slot-number)) @I)))))
+
+(defun zombies-turn (player)
+    (loop for slot-index from 0 to (1- *max-slots*) do
+        (with-slot (slot player slot-index)
+            (when (= (slot-vitality slot) -1)
+                  (handler-case (cb-call (slot-field slot) @I)
+                    (game-logic-error (_)))
+                  (setf (slot-vitality slot) 0)
+                  (setf (slot-field slot)    @I)
+                ))))
 
 (defun card-function (symbol)
     @(gethash symbol *combinators*))
@@ -219,6 +248,7 @@
     (parse-integer (read-line)))
 
 (defun move (side)
+    (zombies-turn side)
     (format t "[~A] enter action code (1 - left, 2 - right): " (if (eq *proponent* side) "proponent" "opponent"))
     (case (parse-integer (read-line))
         (1 (left-application  side (read-card) (read-slot)))
