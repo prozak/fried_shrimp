@@ -4,7 +4,7 @@
 (defvar *max-move-applications-number* 1000)
 (defvar *current-move-applications-count* 0)
 (defvar *zombies-turn* nil)
-(defvar *cur-turn* 1)
+(defvar *cur-turn* 0)
 (defvar *max-turns* 100000)
 
 (defmacro with-applications-limit (&body body)
@@ -375,18 +375,18 @@
 ;;       (game-loop *proponent* *opponent*)))
 
 (defun game-loop (&optional (read-opponent t))
-  (when read-opponent
-    ;(format *error-output* "Reading opponent command~%")
-    (silent-move *opponent*))
-  ;(format *error-output* "Ok opponent command -~A~%" *last-application*)
-  (let ((cmd (get-next-command)))
-    ;(format *error-output* "Player command : ~A, turn ~A~%" cmd *cur-turn*)
-    (silent-move-from-command *proponent* cmd)
-    (handler-case (print-command cmd)
-        (stream-error (_) (declare (ignore _)))))
   (when (< *cur-turn* *max-turns*)
-    (incf *cur-turn*)
-    (game-loop)))
+      (when read-opponent
+        ;(format *error-output* "Reading opponent command~%")
+        (silent-move *opponent*))
+      ;(format *error-output* "Ok opponent command -~A~%" *last-application*)
+      (let ((cmd (get-next-command)))
+        ;(format *error-output* "Player command : ~A, turn ~A~%" cmd *cur-turn*)
+        (silent-move-from-command *proponent* cmd)
+        (handler-case (print-command cmd)
+            (stream-error (_) (declare (ignore _)))))
+      (incf *cur-turn*)
+      (game-loop)))
 
 (defun main ()
   (setf *cur-turn* 0)
