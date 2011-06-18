@@ -1,6 +1,6 @@
 (declaim (special *cur-turn*))
 
-(defvar *debug* t)
+(defvar *debug* nil)
 (defvar *current-task* nil)
 
 (defstruct task
@@ -49,7 +49,7 @@
         (debug-format ">>> ~A ~A ~A~%" slot-number amount tmp-slot)
         (make-task :commands-list
                     (compile-lambda
-                        `(progn (set ,tmp-slot (loop zz (help ',slot-number (K ',slot-number zz) ,amount)))
+                        `(progn (set ,tmp-slot (loop zz (help ',slot-number (K ',slot-number zz) ',amount)))
                                 (set 0 (get ',tmp-slot))
                                 (set 0 (0 zero)))
                         :target-slot tmp-slot
@@ -65,6 +65,15 @@
                                               (d (num-difficulty index)))
                                             (when (> v 0)
                                                 (+ (/ v 100) d)))))))
+
+(defun find-attacker-slot (player)
+    (car (find-slots player :slots-number 1
+                            :score-fn (lambda (slot index)
+                                        (let ((v (slot-vitality slot))
+                                              (d (num-difficulty index)))
+                                            (when (> v 0)
+                                                (+ (/ v 100) d)))))))
+
 
 (defun select-task ()
     (let ((slot-to-heal (find-slot-to-heal *proponent*)))
