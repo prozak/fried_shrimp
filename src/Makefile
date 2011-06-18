@@ -16,6 +16,12 @@ match.fasl : match.lisp compiler.fasl vm.fasl
 main.fasl : main.lisp match.fasl vm.fasl compiler.fasl
 	sbcl --eval '(progn (load "vm.fasl") (load "compiler.fasl") (compile-file "main.lisp") (quit))'
 
+test: test.fasl
+	sbcl --eval '(progn (load "test.fasl") (sb-ext:save-lisp-and-die "test" :executable t :toplevel (quote test-it) :purify t))'
+
+test.fasl : test.lisp
+	sbcl --eval '(progn (compile-file "test.lisp") (quit))'
+
 sent:
 	rm -rf sent
 	mkdir -p sent/src

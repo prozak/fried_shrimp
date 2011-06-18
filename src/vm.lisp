@@ -72,6 +72,7 @@
   (in-game-check (< (incf *current-move-applications-count*)
                     *max-move-applications-number*)
                  "in call to cb-call")
+  (debug-format "cb-call ~A ~A~%" combinator param)
   ;; Aaaaa
   ;;(push (cb-call-no-param param) (cb-params combinator))
   (let* ((spec                (cb-spec combinator))
@@ -83,7 +84,8 @@
                     (copy-combinator-with-params combinator params))
                    ((= actual-params-num required-params-num)
                     (apply (cs-eval-function spec) (reverse params)))
-                   (t (error "cb-apply called with more parameters then expected, combinator: ~A" combinator)))))
+                   (t (debug-format "cb-apply called with more parameters then expected, combinator: ~A" combinator)
+                      (error 'game-logic-error)))))
                                         ;(format t "cba: ~A~%" combinator)
     result))
 
@@ -203,6 +205,7 @@
   @I)
 
 (defun wrap-slot (number)
+  (in-game-check (integerp number) "in call to wrap-slot, number is ~A" number)
   (- (1- *max-slots*) number))
 
 (defcombinator dec (i)
