@@ -1,3 +1,5 @@
+(declaim (special *debug*))
+
 (defun debug-format (&rest args)
 	(when *debug*
 		(apply #'format (cons t args))))
@@ -269,8 +271,8 @@
                 (case (first cmd)
                   (left (format t "~A: left ~A ~A ;; ~A~%" (incf cnt) (show-card (second cmd)) (third cmd) (if (fourth cmd) (fourth cmd) "" )))
                   (right (format t "~A: right ~A ~A ;; ~A~%" (incf cnt) (third cmd) (show-card (second cmd)) (if (fourth cmd) (fourth cmd) "" )))))
-              res))
-      res)))
+              res)))
+    res))
 
 (defun compile-lambda-1 (term &key (target-slot 1))
   (compile-combinators-to-program (compile-lambda-to-combinators (canon-lambda (compile-all-ints (macro-expand-lambda term)))) target-slot))
