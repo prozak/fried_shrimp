@@ -42,11 +42,37 @@
                 (mapcar #'cdr (subseq slots 0 slots-number)))
             (mapcar #'cdr slots))))
 
+(defmacro deftask (name (&rest params) use     (&rest slots)
+                                       not-use (&rest not-use-list)
+                        commands-list)
+    ;(assert slots t "deftask requires at least one slot parameter")
+    `(defun ,name (,@params)
+       (let ,slots
+        (destructuring-bind (,@slots) (find-slots *proponent* :slots-number ,(length slots)
+                                                              :score-fn #'slot-score
+                                                              :not-use-list (list ,@not-use-list ,@slots))
+            (make-task :commands-list (compile-lambda ,commands-list
+                                        :target-slot ,(car slots)
+                                        :prealloc-slots
+                                            (append (list ,@not-use-list ,@slots)
+                                                    (find-slots *proponent*
+                                                                :score-fn (lambda (slot i) (when (dead? slot) 1)))))
+                       :required-slots (list ,@slots))))))
+;(print (macroexpand-1
+(deftask make-health-booster-task (slot-number amount)
+                                  use (tmp-slot)
+                                  not-use nil
+    `(progn (set ,tmp-slot (loop zz (help ',slot-number ,(if (= 0 slot-number)
+                                                             'zz
+                                                             `(K ',slot-number zz)) ',amount)))
+            (set 0 (get ',tmp-slot))
+            (set 0 (0 zero))));))
+#|
 (defun make-health-booster-task (slot-number amount)
     (destructuring-bind (tmp-slot) (find-slots *proponent* :slots-number 1
                                                            :score-fn #'slot-score
                                                            :not-use-list (list slot-number))
-        (debug-format ">>> ~A ~A ~A~%" slot-number amount tmp-slot)
+        ;;(debug-format ">>> ~A ~A ~A~%" slot-number amount tmp-slot)
         (make-task :commands-list
                     (compile-lambda
                         `(progn (set ,tmp-slot (loop zz (help ',slot-number ,(if (= 0 slot-number)
@@ -59,7 +85,7 @@
                                                 (find-slots *proponent*
                                                             :score-fn (lambda (slot i) (when (dead? slot) 1)))))
                     :required-slots (list slot-number tmp-slot))))
-
+|#
 (defun make-attack-task (attacker-slot-number attacked-slot-number amount)
     (destructuring-bind (tmp-slot) (find-slots *proponent* :slots-number 1
                                                            :score-fn #'slot-score)
@@ -103,19 +129,19 @@
 
 
 (defun select-task ()
-    ;; (let ((slot-to-heal (find-slot-to-heal *proponent*)))
-    ;;     (if slot-to-heal
-    ;;        (make-health-booster-task slot-to-heal (1- (slot-vitality (get-slot *proponent* slot-to-heal))))
-    ;;        (list 'left 'I 0)))
-  (let* ((attacker (find-attacker-slot *proponent*))
-         (attacked (find-slot-to-attack *opponent*))
-         (attacker-v (slot-vitality (get-slot *proponent* attacker)))
-         (attacked-v (slot-vitality (get-slot *opponent* attacked))))
-    (if (and attacker attacked)
-        (make-attack-task attacker attacked (if (< attacker-v (truncate (* attacked-v 10/9)))
-                                                (truncate (* attacker-v 0.9))
-                                                attacked-v))
-        (list 'left 'I 0))))
+    (let ((slot-to-heal (find-slot-to-heal *proponent*)))
+        (if slot-to-heal
+           (make-health-booster-task slot-to-heal (1- (slot-vitality (get-slot *proponent* slot-to-heal))))
+           (list 'left 'I 0))))
+;  (let* ((attacker (find-attacker-slot *proponent*))
+;         (attacked (find-slot-to-attack *opponent*))
+;         (attacker-v (slot-vitality (get-slot *proponent* attacker)))
+;         (attacked-v (slot-vitality (get-slot *opponent* attacked))))
+;    (if (and attacker attacked)
+;        (make-attack-task attacker attacked (if (< attacker-v (truncate (* attacked-v 10/9)))
+;                                                (truncate (* attacker-v 0.9))
+;                                                attacked-v))
+;        (list 'left 'I 0))))
 ;    (if *last-application*
 ;        (make-task :commands-list (list *last-application*))
 ;        (make-task :commands-list (list (list 'left 'I 0)))))
