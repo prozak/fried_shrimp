@@ -246,7 +246,13 @@
 (defun compile-lambda (term &key (target-slot 1) (prealloc-slots nil))
   (init-free-slots)
   (mapc #'alloc-specific-slot prealloc-slots)
-  (let ((res (compile-combinators-to-program (compile-lambda-to-combinators (canon-lambda (compile-all-ints (macro-expand-lambda term)))) target-slot))
+  (let ((res (if (and (listp term)
+		      (eq (first term) 'progn)) ;; Top level 'progn' optimization
+		 (apply #'append
+			(mapcar (lambda (sub-term)
+				  (compile-lambda-1 sub-term :target-slot target-slot))
+				(cdr term)))
+		 (compile-lambda-1 term :target-slot target-slot)))
 	(cnt -1))
     (when *compiled-form-dump*
       (with-open-file (*standard-output*
@@ -261,6 +267,9 @@
 	      res))
       res)))
 
+(defun compile-lambda-1 (term &key (target-slot 1))
+  (compile-combinators-to-program (compile-lambda-to-combinators (canon-lambda (compile-all-ints (macro-expand-lambda term)))) target-slot))
+
 (defun print-program (program fname)
   (with-open-file (*standard-output*
                    fname
@@ -272,3 +281,6 @@
               (left (format t "1~%~A~%~A~%" (show-card (second cmd)) (third cmd)))
               (right (format t "2~%~A~%~A~%" (third cmd) (show-card (second cmd))))))
           program)))
+
+;; Program that is able to run a command on two slots
+;;(print-program (compile-lambda '(progn (set 1 (loop zz (inc (K '10 zz)))) (set 0 (get '1)) (set 1 (loop zz (inc (K '11 zz)))) (set 1 (1 zero))) :target-slot 2 :prealloc-slots '(1)) "/home/myth/projects/icfp2011/icfp-2011/example.input")
