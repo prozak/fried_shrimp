@@ -1,6 +1,6 @@
 (declaim (special *cur-turn*))
 
-(defvar *debug* t)
+(defvar *debug* nil)
 (defvar *current-task* nil)
 
 (defstruct task
@@ -42,6 +42,32 @@
                 (mapcar #'cdr (subseq slots 0 slots-number)))
             (mapcar #'cdr slots))))
 
+(defmacro deftask (name (&rest params) use     (&rest slots)
+                                       not-use (&rest not-use-list)
+                        commands-list)
+    ;(assert slots t "deftask requires at least one slot parameter")
+    `(defun ,name (,@params)
+       (let ,slots
+        (destructuring-bind (,@slots) (find-slots *proponent* :slots-number ,(length slots)
+                                                              :score-fn #'slot-score
+                                                              :not-use-list (list ,@not-use-list ,@slots))
+            (make-task :commands-list (compile-lambda ,commands-list
+                                        :target-slot ,(car slots)
+                                        :prealloc-slots
+                                            (append (list ,@not-use-list ,@slots)
+                                                    (find-slots *proponent*
+                                                                :score-fn (lambda (slot i) (when (dead? slot) 1)))))
+                       :required-slots (list ,@slots))))))
+;(print (macroexpand-1
+(deftask make-health-booster-task (slot-number amount)
+                                  use (tmp-slot)
+                                  not-use nil
+    `(progn (set ,tmp-slot (loop zz (help ',slot-number ,(if (= 0 slot-number)
+                                                             'zz
+                                                             `(K ',slot-number zz)) ',amount)))
+            (set 0 (get ',tmp-slot))
+            (set 0 (0 zero))));))
+#|
 (defun make-health-booster-task (slot-number amount)
     (destructuring-bind (tmp-slot) (find-slots *proponent* :slots-number 1
                                                            :score-fn #'slot-score
@@ -59,6 +85,7 @@
                                                 (find-slots *proponent*
                                                             :score-fn (lambda (slot i) (when (dead? slot) 1)))))
                     :required-slots (list slot-number tmp-slot))))
+|#
 
 (defun make-attack-task (attacker-slot-number attacked-slot-number amount)
     (destructuring-bind (tmp-slot) (find-slots *proponent* :slots-number 1
@@ -199,10 +226,6 @@
 (defconstant +heal-ratio+ 30)
 
 (defun select-task ()
-    ;; (let ((slot-to-heal (find-slot-to-heal *proponent*)))
-    ;;     (if slot-to-heal
-    ;;        (make-health-booster-task slot-to-heal (1- (slot-vitality (get-slot *proponent* slot-to-heal))))
-    ;;        (list 'left 'I 0)))
   (let* ((revive (find-slot-to-revive *proponent*))
          (to-heal (find-slot-that-needs-healing *proponent*))
          (rnd (random 100))
@@ -227,22 +250,8 @@
                   (make-attacker))))
     (if cmd
         cmd
-        (list 'left 'I 0))))
-    
-          
+        (list 'left 'I 0))))          
         
-;;       ))
-
-;    (if *last-application*
-;        (make-task :commands-list (list *last-application*))
-;        (make-task :commands-list (list (list 'left 'I 0)))))
-;    (make-task :commands-list (compile-lambda '(progn (set 0 (loop zz (inc zz)))
-;                                                      (set 0 (get '1))
-;                                                      (set 0 (0 zero)))
-;                                              :target-slot 2
-;                                              :prealloc-slots '(1))
-;               :required-slots '(1)))
-;    (make-task :commands-list (list (list 'left 'I 0))))
 
 (defun get-next-command ()
     ;(format t "gnc: task is ~A~%" *current-task*)
