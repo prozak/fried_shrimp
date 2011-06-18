@@ -1,5 +1,6 @@
 (declaim (special *cur-turn*))
 
+(defvar *debug* nil)
 (defvar *current-task* nil)
 
 (defstruct task
@@ -20,7 +21,13 @@
                         (get-needed-slots (task-commands-list task))))))
 
 (defun select-task ()
-    (make-task :commands-list (list (list 'left 'I 0))))
+    (make-task :commands-list (compile-lambda '(progn (set 1 (loop zz (inc zz)))
+                                                      (set 0 (get '1))
+                                                      (set 0 (0 zero)))
+                                              :target-slot 2
+                                              :prealloc-slots '(1))
+               :required-slots '(1)))
+;    (make-task :commands-list (list (list 'left 'I 0))))
 
 (defun get-next-command ()
     ;(format t "gnc: task is ~A~%" *current-task*)
