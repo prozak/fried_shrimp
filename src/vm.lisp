@@ -1,35 +1,46 @@
-(defvar *max-slots* 2)
+(defparameter *max-slots* 256)
 (defvar *max-live*  65535)
 (defvar *init-live* 10000)
 (defvar *max-move-applications-number* 1000)
 (defvar *current-move-applications-count* 0)
 (defvar *zombies-turn* nil)
+(defvar *cur-turn* 0)
 
 (defmacro with-applications-limit (&body body)
-    `(let ((*current-move-applications-number* 0))
+    `(let ((*current-move-applications-count* 0))
         ,@body))
 
 (defstruct (combinator-spec (:conc-name cs-))
     (name          'noname  :type symbol)
     (eval-function nil      :type function)
-    (params-number 1        :type (integer 1 100)))
+    (params-number 0        :type (integer 0 100)))
 
 (defstruct (combinator (:conc-name cb-)
                        (:print-function (lambda (self stream _)
+					  (declare (ignore _))
                                           (let ((spec (cb-spec self))
                                                 (params (cb-params self)))
-                                            (format stream "[~A ~A]"
+                                            (format stream "~A~A"
                                                 (cs-name spec)
-                                                (append (reverse params)
-                                                        (loop for _ from 1 to (- (cs-params-number spec) (length params)) collect
-                                                            "_")))))))
+                                                (if params
+						    (append (reverse params)
+							    ;;(loop for _ from 1 to (- (cs-params-number spec) (length params)) collect
+							    ;;    "_")
+							    )
+						    ""))))))
     spec
     params)
 
+(defun copy-combinator-with-params (combinator params)
+  (make-combinator :spec (cb-spec combinator)
+		   :params params))
+
 ; defines '@' to be used to create new combinator instance, the syntax is:
 ;   @<some combinator defined by 'defcombinator'>
-(set-macro-character #\@ (lambda (stream char)
-                            (list 'make-combinator ':spec (read stream t nil t))))
+(eval-when (:load-toplevel :compile-toplevel :execute)
+  (set-macro-character #\@ (lambda (stream char)
+			     (declare (ignore char))
+			     (list 'make-combinator ':spec `(gethash ',(read stream t nil t) *combinators*)))))
 
 ; raised for 'errors' specified in the doc
 (define-condition game-logic-error (error) ())
@@ -42,36 +53,49 @@
         (format t "~%")
         (error 'game-logic-error)))
 
+(defun cb-call-no-param (combinator-or-num)
+  (if (integerp combinator-or-num)
+      combinator-or-num
+      (let* ((spec                (cb-spec combinator-or-num))
+	     (required-params-num (cs-params-number spec)))
+        (cond
+	  ((= 0 required-params-num)
+	   (funcall (cs-eval-function spec)))
+	  (t combinator-or-num)))))
+
 (defun cb-call (combinator param)
     (in-game-check (typep combinator 'combinator) "in call to cb-call")
     (in-game-check (< (incf *current-move-applications-count*)
                       *max-move-applications-number*)
                    "in call to cb-call")
-    (push param (cb-params combinator))
+    ;; Aaaaa
+    ;;(push (cb-call-no-param param) (cb-params combinator))
     (let* ((spec                (cb-spec combinator))
-           (params              (cb-params combinator))
+           (params              (cons (cb-call-no-param param) (cb-params combinator)))
            (required-params-num (cs-params-number spec))
-           (actual-params-num   (length params)))
-        ;(format t "cba: ~A~%" combinator)
-        (cond
-            ((< actual-params-num required-params-num) combinator)
-            ((= actual-params-num required-params-num)
-                (apply (cs-eval-function spec) (reverse params)))
-            (t (error "cb-apply called with more parameters then expected, combinator: ~A" combinator)))
-        ))
+           (actual-params-num   (length params))
+	   (result (cond
+		     ((< actual-params-num required-params-num) 
+		      (copy-combinator-with-params combinator params))
+		     ((= actual-params-num required-params-num)
+		      (apply (cs-eval-function spec) (reverse params)))
+		     (t (error "cb-apply called with more parameters then expected, combinator: ~A" combinator)))))
+					;(format t "cba: ~A~%" combinator)
+      result))
 
 ; combinator symbol -> combinator spec
-(defvar *combinators* (make-hash-table))
+(defparameter *combinators* (make-hash-table))
 
 (defmacro defcombinator (name (&rest params) &body body)
-    (when (< (length params) 1)
-        (error "error while defining combinator: ~A, number of parameters should not be less then 1" name))
-    `(let ()
-        (setf ,name (make-combinator-spec
-                         :name ',name
-                         :eval-function (lambda (,@params) ,@body)
-                         :params-number ,(length params)))
-        (setf (gethash ',name *combinators*) ,name)))
+    (when (< (length params) 0)
+        (error "error while defining combinator: ~A, number of parameters should not be less then 0" name))
+    (let ((funname (gensym)))
+      `(progn
+	 (defvar ,funname (make-combinator-spec
+			   :name ',name
+			   :eval-function (lambda ,params ,@body)
+			   :params-number ,(length params)))
+	 (setf (gethash ',name *combinators*) ,funname))))
 
 (defcombinator I (x) x)
 
@@ -89,10 +113,12 @@
     (format t "~A~%" ci))
 |#
 
-(defstruct (slot (:print-function (lambda (self stream _)
-                                    (format stream "{~A: ~A}" (slot-vitality self) (slot-field self)))))
-    (field    @I         );:type (or (integer 0 *max-live*) function))
-    (vitality *init-live*));:type (integer -1 *max-live*)))
+(defstruct (ltg-slot (:print-function (lambda (self stream _)
+					(declare (ignore _))
+					(format stream "{~A: ~A}" (slot-vitality self) (slot-field self))))
+		     (:conc-name slot-))
+    (field    @I         ) ;:type (or (integer 0 *max-live*) function))
+    (vitality *init-live*)) ;:type (integer -1 *max-live*)))
 
 (defun dead? (slot)
     (<= (slot-vitality slot) 0))
@@ -110,10 +136,10 @@
     array)
 
 (defstruct player
-    (slots (fill-array (make-array *max-slots* :element-type 'slot) #'make-slot)))
+    (slots (fill-array (make-array *max-slots* :element-type 'ltg-slot) #'make-ltg-slot)))
 
-(defvar *proponent* (make-player))
-(defvar *opponent*  (make-player))
+(defparameter *proponent* (make-player))
+(defparameter *opponent*  (make-player))
 
 (defun get-slot (player slot-number)
     (in-game-check (valid-slot-number? slot-number) "in call to get-slot, slot-number is ~A" slot-number)
@@ -132,7 +158,7 @@
         (in-game-check (alive? ,name) "in call to with-alive-slot")
         ,@body))
 
-(defcombinator zero (x) 0)
+(defcombinator zero () 0)
 
 (defcombinator succ (n)
     (in-game-check (integerp n) "in call to succ, n is ~A" n)
@@ -150,18 +176,18 @@
     (with-alive-slot (slot *proponent* i)
         (slot-field slot)))
 
-(defcombinator put (unused) @I)
+(defcombinator put (unused) (declare (ignore unused)) @I)
 
 (defcombinator S (f g x)
-    (let ((h (cb-call f x))
-          (y (cb-call g x))
-          (z (cb-call h y)))
+    (let* ((h (cb-call f x))
+	   (y (cb-call g x))
+	   (z (cb-call h y)))
         z))
 
-(defcombinator K (x y) x)
+(defcombinator K (x y) (declare (ignore y)) x)
 
-(defcombinator inc (i)
-    (with-slot (slot *proponent* i)
+(defcombinator inc (index)
+    (with-slot (slot *proponent* index)
         (if (not *zombies-turn*)
             ; normal operation
             (when (and (< (slot-vitality slot) *max-live*)
@@ -212,7 +238,7 @@
     (with-slot (slot-i *proponent* i)
         (let ((v (slot-vitality slot-i)))
             (in-game-check (and (integerp n) (<= n v)) "in call to help, n is ~A, v is ~A" n v)
-            (whith-slot (slot-j *proponent* j)
+            (with-slot (slot-j *proponent* j)
                 (when (alive? slot-j)
                     (let ((w (slot-vitality slot-j))
                           (heal (truncate (/ (* n 11) 10))))
@@ -251,14 +277,18 @@
         (handler-case 
                 (with-alive-slot (slot player slot-number)  ; note: as a side effect of this dead slots could be set to I
                     (setf (slot-field slot) (cb-call card (slot-field slot))))
-            (game-logic-error (_) (setf (slot-field (get-slot player slot-number)) @I)))))
+            (game-logic-error (_) 
+	      (declare (ignore _)) 
+	      (setf (slot-field (get-slot player slot-number)) @I)))))
 
 (defun right-application (player slot-number card)
     (when (valid-slot-number? slot-number)                  ;TODO: what todo if it is not valid?
         (handler-case 
                 (with-alive-slot (slot player slot-number)  ; note: as a side effect of this dead slots could be set to I
                     (setf (slot-field slot) (cb-call (slot-field slot) card)))
-            (game-logic-error (_) (setf (slot-field (get-slot player slot-number)) @I)))))
+            (game-logic-error (_) 
+	      (declare (ignore _))
+	      (setf (slot-field (get-slot player slot-number)) @I)))))
 
 (defun zombies-turn (player)
     (let ((*zombies-turn* t))
@@ -266,26 +296,30 @@
             (with-slot (slot player slot-index)
                 (when (= (slot-vitality slot) -1)
                       (handler-case (cb-call (slot-field slot) @I)
-                        (game-logic-error (_)))
+                        (game-logic-error (_) (declare (ignore _))))
                       (setf (slot-vitality slot) 0)
                       (setf (slot-field slot)    @I)
                     )))))
 
 (defun card-function (symbol)
-    @(gethash symbol *combinators*))
+    (make-combinator :spec (gethash symbol *combinators*)))
 
 (defun read-card ()
     (format t "   enter card: ")
+    (finish-output)
     (card-function (intern (string-upcase (read-line)))))
 
 (defun read-slot ()
     (format t "   enter slot: ")
+    (finish-output)
     (parse-integer (read-line)))
 
 (defun move (side)
     (with-applications-limit
         (zombies-turn side))
+    (format t "Turn ~A~%" *cur-turn*)
     (format t "[~A] enter action code (1 - left, 2 - right): " (if (eq *proponent* side) "proponent" "opponent"))
+    (finish-output)
     (with-applications-limit
         (case (parse-integer (read-line))
             (1 (left-application  side (read-card) (read-slot)))
@@ -298,12 +332,14 @@
 
 (defun game-loop (first second)
     (move first)
+    (incf *cur-turn*)
 ;    (move second)
     (game-loop first second))
 
 (defun main ()
-    (if (string= (first *args*) "0")
-        (game-loop *proponent* *opponent*)
-        (game-loop *opponent* *proponent*)))
+  (setf *cur-turn* 0)
+  (if (string= (first #+:clisp *args* #+:sbcl sb-ext:*posix-argv*) "1")
+      (game-loop *opponent* *proponent*)
+      (game-loop *proponent* *opponent*)))
 
 (main)
