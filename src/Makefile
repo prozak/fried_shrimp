@@ -10,5 +10,10 @@ compiler.fasl : compiler.lisp
 vm.fasl : vm.lisp
 	sbcl --eval '(progn (compile-file "vm.lisp") (quit))'
 
-main.fasl : main.lisp
-	sbcl --eval '(progn (compile-file "main.lisp") (quit))'
+main.fasl : main.lisp vm.fasl compiler.fasl
+	sbcl --eval '(progn (load "vm.fasl") (load "compiler.fasl") (compile-file "main.lisp") (quit))'
+
+clean:
+	rm -f *.fasl
+
+.PHONY: clean default

@@ -48,10 +48,10 @@
 
 (defmacro in-game-check (condition &optional comment &rest comment-params)
   `(unless ,condition
-     (format t "BANG: in game check ~A failed~A" ',condition (if ,comment ": " ""))
-     (when ,comment
-       (format t ,comment ,@comment-params))
-     (format t "~%")
+     ;(format t "BANG: in game check ~A failed~A" ',condition (if ,comment ": " ""))
+     ;(when ,comment
+     ;  (format t ,comment ,@comment-params))
+     ;(format t "~%")
      (error 'game-logic-error)))
 
 (defun cb-call-no-param (combinator-or-num)
@@ -373,20 +373,21 @@
 
 (defun game-loop (&optional (read-opponent t))
   (when read-opponent
-    (format *error-output* "Reading opponent command~%")
+    ;(format *error-output* "Reading opponent command~%")
     (silent-move *opponent*))
-  (format *error-output* "Ok opponent command -~A~%" *last-application*)
+  ;(format *error-output* "Ok opponent command -~A~%" *last-application*)
   (let ((cmd (get-next-command)))
-    (format *error-output* "Player command : ~A, turn ~A~%" cmd *cur-turn*)
+    ;(format *error-output* "Player command : ~A, turn ~A~%" cmd *cur-turn*)
     (silent-move-from-command *proponent* cmd)
-    (print-command cmd))
+    (handler-case (print-command cmd)
+        (stream-error (_) (declare (ignore _)))))
   (when (< *cur-turn* *max-turns*)
     (incf *cur-turn*)
     (game-loop)))
 
 (defun main ()
   (setf *cur-turn* 0)
-  (format *error-output* "Running main with args ~A~%" sb-ext:*posix-argv*)
+  ;(format *error-output* "Running main with args ~A~%" sb-ext:*posix-argv*)
   (ignore-errors
     (if (string= (second sb-ext:*posix-argv*) "0")
         (game-loop nil)
