@@ -46,6 +46,9 @@
                                         ; raised for 'errors' specified in the doc
 (define-condition game-logic-error (error) ())
 
+(defun $p (comb &rest params)
+  (copy-combinator-with-params comb params))
+
 (defmacro in-game-check (condition &optional comment &rest comment-params)
   `(unless ,condition
      (format t "BANG: in game check ~A failed~A" ',condition (if ,comment ": " ""))
