@@ -3,6 +3,7 @@
 (defvar *init-live* 10000)
 (defvar *max-move-applications-number* 1000)
 (defvar *current-move-applications-count* 0)
+(defvar *zombies-turn* nil)
 
 (defmacro with-applications-limit (&body body)
     `(let ((*current-move-applications-number* 0))
@@ -43,7 +44,7 @@
 
 (defun cb-call (combinator param)
     (in-game-check (typep combinator 'combinator) "in call to cb-call")
-    (in-game-check (> (incf *current-move-applications-count*)
+    (in-game-check (< (incf *current-move-applications-count*)
                       *max-move-applications-number*)
                    "in call to cb-call")
     (push param (cb-params combinator))
@@ -141,7 +142,7 @@
 
 (defcombinator dbl (n)
     (in-game-check (integerp n) "in call to dbl, n is ~A" n)
-    (if (< n (/ *max-live* 2))
+    (if (< (* 2 n) *max-live*)
         (* 2 n)
         *max-live*))
 
@@ -161,9 +162,14 @@
 
 (defcombinator inc (i)
     (with-slot (slot *proponent* i)
-        (when (and (<  (slot-vitality slot) *max-live*)
-                   (>= (slot-vitality slot) 0))
-            (incf (slot-vitality slot))))
+        (if (not *zombies-turn*)
+            ; normal operation
+            (when (and (< (slot-vitality slot) *max-live*)
+                       (> (slot-vitality slot) 0))
+                (incf (slot-vitality slot)))
+            ; zombie operation
+            (when (> (slot-vitality slot) 0)
+                (decf (slot-vitality slot)))))
     @I)
 
 (defun wrap-slot (number)
@@ -171,8 +177,14 @@
 
 (defcombinator dec (i)
     (with-slot (slot *opponent* (wrap-slot i))
-        (when (> (slot-vitality slot) 0)
-            (decf (slot-vitality slot))))
+        (if (not *zombies-turn*)
+            ; normal operation
+            (when (> (slot-vitality slot) 0)
+                (decf (slot-vitality slot)))
+            ; zombie operation
+            (when (and (< (slot-vitality slot) *max-live*)
+                       (> (slot-vitality slot) 0))
+                (incf (slot-vitality slot)))))
     @I)
 
 (defcombinator attack (i j n)
@@ -184,10 +196,17 @@
                 (when (alive? his-slot)
                     (let ((w (slot-vitality his-slot))
                           (hit (truncate (/ (* 9 n) 10))))
-                        (if (> hit w)
-                            (setf (slot-vitality his-slot) 0)
-                            (setf (slot-vitality his-slot) (- w hit))))))))
-            @I)
+                        (if (not *zombies-turn*)
+                            ; normal operation
+                            (if (> hit w)
+                                (setf (slot-vitality his-slot) 0)
+                                (setf (slot-vitality his-slot) (- w hit)))
+                            ; zombie operation
+                            (if (> (+ hit w) *max-live*)
+                                (setf (slot-vitality his-slot) *max-live*)
+                                (setf (slot-vitality his-slot) (+ hit w))))
+                        )))))
+    @I)
 
 (defcombinator help (i j n)
     (with-slot (slot-i *proponent* i)
@@ -195,11 +214,19 @@
             (in-game-check (and (integerp n) (<= n v)) "in call to help, n is ~A, v is ~A" n v)
             (whith-slot (slot-j *proponent* j)
                 (when (alive? slot-j)
-                    (let ((w (+ (slot-vitality slot-j) (truncate (/ (* n 11) 10)))))
-                        (setf (slot-vitality slot-j) (if (> w *max-live*)
-                                                         *max-live*
-                                                         w))
-                        @I))))))
+                    (let ((w (slot-vitality slot-j))
+                          (heal (truncate (/ (* n 11) 10))))
+                        (if (not *zombies-turn*)
+                            ; normal operation
+                            (if (> (+ heal w) *max-live*)
+                                (setf (slot-vitality slot-j) *max-live*)
+                                (setf (slot-vitality slot-j) (+ heal w)))
+                            ; zombie operation
+                            (if (< (- w heal) 0)
+                                (setf (slot-vitality slot-j) 0)
+                                (setf (slot-vitality slot-j) (- w heal))))
+                        )))))
+    @I)
 
 (defcombinator copy (i)
     (with-slot (slot *opponent* i)
@@ -234,14 +261,15 @@
             (game-logic-error (_) (setf (slot-field (get-slot player slot-number)) @I)))))
 
 (defun zombies-turn (player)
-    (loop for slot-index from 0 to (1- *max-slots*) do
-        (with-slot (slot player slot-index)
-            (when (= (slot-vitality slot) -1)
-                  (handler-case (cb-call (slot-field slot) @I)
-                    (game-logic-error (_)))
-                  (setf (slot-vitality slot) 0)
-                  (setf (slot-field slot)    @I)
-                ))))
+    (let ((*zombies-turn* t))
+        (loop for slot-index from 0 to (1- *max-slots*) do
+            (with-slot (slot player slot-index)
+                (when (= (slot-vitality slot) -1)
+                      (handler-case (cb-call (slot-field slot) @I)
+                        (game-logic-error (_)))
+                      (setf (slot-vitality slot) 0)
+                      (setf (slot-field slot)    @I)
+                    )))))
 
 (defun card-function (symbol)
     @(gethash symbol *combinators*))
@@ -265,12 +293,12 @@
             (t (error "wrong command"))))
     (format t "---- move end, status: ----~%")
     (format t "[proponent]: ~A~%" *proponent*)
-    (format t "[opponent]: ~A~%" *opponent*)
+;    (format t "[opponent]: ~A~%" *opponent*)
     (format t "---- status end ----~%~%"))
 
 (defun game-loop (first second)
     (move first)
-    (move second)
+;    (move second)
     (game-loop first second))
 
 (defun main ()
