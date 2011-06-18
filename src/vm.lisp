@@ -1,6 +1,12 @@
 (defvar *max-slots* 2)
 (defvar *max-live*  65535)
 (defvar *init-live* 10000)
+(defvar *max-move-applications-number* 1000)
+(defvar *current-move-applications-count* 0)
+
+(defmacro with-applications-limit (&body body)
+    `(let ((*current-move-applications-number* 0))
+        ,@body))
 
 (defstruct (combinator-spec (:conc-name cs-))
     (name          'noname  :type symbol)
@@ -37,6 +43,9 @@
 
 (defun cb-call (combinator param)
     (in-game-check (typep combinator 'combinator) "in call to cb-call")
+    (in-game-check (> (incf *current-move-applications-count*)
+                      *max-move-applications-number*)
+                   "in call to cb-call")
     (push param (cb-params combinator))
     (let* ((spec                (cb-spec combinator))
            (params              (cb-params combinator))
@@ -57,7 +66,7 @@
     (when (< (length params) 1)
         (error "error while defining combinator: ~A, number of parameters should not be less then 1" name))
     `(let ()
-        (defvar ,name (make-combinator-spec
+        (setf ,name (make-combinator-spec
                          :name ',name
                          :eval-function (lambda (,@params) ,@body)
                          :params-number ,(length params)))
@@ -95,8 +104,8 @@
          (> *max-slots* val)))
 
 (defun fill-array (array func)
-    (loop for cnt from 0 to (1- (length array)) do
-        (setf (aref array cnt) (funcall func)))
+    (loop for i from 0 to (1- (length array)) do
+        (setf (aref array i) (funcall func)))
     array)
 
 (defstruct player
@@ -209,8 +218,6 @@
         (setf (slot-vitality slot) -1))
     @I)
 
-;; TODO: 1000 applications check
-
 (defun left-application (player card slot-number)
     ;;(format t "la: ~A -> ~A~%" card slot-number)
     (when (valid-slot-number? slot-number)                  ;TODO: what todo if it is not valid?
@@ -248,12 +255,14 @@
     (parse-integer (read-line)))
 
 (defun move (side)
-    (zombies-turn side)
+    (with-applications-limit
+        (zombies-turn side))
     (format t "[~A] enter action code (1 - left, 2 - right): " (if (eq *proponent* side) "proponent" "opponent"))
-    (case (parse-integer (read-line))
-        (1 (left-application  side (read-card) (read-slot)))
-        (2 (right-application side (read-slot) (read-card)))
-        (t (error "wrong command")))
+    (with-applications-limit
+        (case (parse-integer (read-line))
+            (1 (left-application  side (read-card) (read-slot)))
+            (2 (right-application side (read-slot) (read-card)))
+            (t (error "wrong command"))))
     (format t "---- move end, status: ----~%")
     (format t "[proponent]: ~A~%" *proponent*)
     (format t "[opponent]: ~A~%" *opponent*)
