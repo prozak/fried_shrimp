@@ -16,19 +16,23 @@ match.fasl : match.lisp compiler.fasl vm.fasl
 main.fasl : main.lisp match.fasl vm.fasl compiler.fasl
 	sbcl --eval '(progn (load "vm.fasl") (load "compiler.fasl") (compile-file "main.lisp") (quit))'
 
-sent: sent/src
+sent:
+	rm -rf sent
 	mkdir -p sent/src
 	cp *.lisp sent/src
-	echo "#!/bin/sh" > sent/install
+	cp Makefile sent/src
+	echo "#!/bin/sh\n" > sent/install
 	echo "cd src" >> sent/install
 	echo "make" >> sent/install
 	echo "cd .." >> sent/install
-	echo "#!/bin/sh" > sent/run
-	echo "src/fried_shrimp" >> sent/run
+	chmod u+x sent/install
+	echo "#!/bin/sh\n" > sent/run
+	echo "src/fried_shrimp \$$1" >> sent/run
+	chmod u+x sent/run
 	cd sent; tar czf sent.tar.gz *
 
 clean:
 	rm -f *.fasl
 	rm -rf sent
 
-.PHONY: clean default
+.PHONY: clean default sent
