@@ -183,8 +183,20 @@
 (defun end-program ()
   (setf *current-program* (nreverse *current-program*)))
 
+(defun num-difficulty (num)
+  (cond ((= num 0)
+         1)
+        ((= (mod num 2) 0)
+         (1+ (num-difficulty (/ num 2))))
+        (t (1+ (num-difficulty (1- num))))))
+
+(defparameter *sorted-free-slots*
+  (sort (loop for i from 1 to 255 collect i)
+        #'<
+        :key #'num-difficulty))
+
 (defun init-free-slots ()
-  (setf *free-slots* (loop for i from 1 to 255 collect i)))
+  (setf *free-slots* (copy-list *sorted-free-slots*)))
 
 (defun alloc-slot ()
   (let ((res (pop *free-slots*)))
