@@ -4,7 +4,8 @@
 (defvar *max-move-applications-number* 1000)
 (defvar *current-move-applications-count* 0)
 (defvar *zombies-turn* nil)
-(defvar *cur-turn* 0)
+(defvar *cur-turn* 1)
+(defvar *max-turns* 100000)
 
 (defmacro with-applications-limit (&body body)
     `(let ((*current-move-applications-count* 0))
@@ -20,7 +21,7 @@
 					  (declare (ignore _))
                                           (let ((spec (cb-spec self))
                                                 (params (cb-params self)))
-                                            (format stream "~A~A"
+                                            (format stream "@~A~A"
                                                 (cs-name spec)
                                                 (if params
 						    (append (reverse params)
@@ -271,8 +272,11 @@
         (setf (slot-vitality slot) -1))
     @I)
 
+(defvar *last-application* nil)
+
 (defun left-application (player card slot-number)
     ;;(format t "la: ~A -> ~A~%" card slot-number)
+    (setf *last-application* (list 'left (cs-name (cb-spec card)) slot-number))
     (when (valid-slot-number? slot-number)                  ;TODO: what todo if it is not valid?
         (handler-case 
                 (with-alive-slot (slot player slot-number)  ; note: as a side effect of this dead slots could be set to I
@@ -282,6 +286,7 @@
 	      (setf (slot-field (get-slot player slot-number)) @I)))))
 
 (defun right-application (player slot-number card)
+    (setf *last-application* (list 'right slot-number (cs-name (cb-spec card))))
     (when (valid-slot-number? slot-number)                  ;TODO: what todo if it is not valid?
         (handler-case 
                 (with-alive-slot (slot player slot-number)  ; note: as a side effect of this dead slots could be set to I
@@ -330,16 +335,61 @@
 ;    (format t "[opponent]: ~A~%" *opponent*)
     (format t "---- status end ----~%~%"))
 
-(defun game-loop (first second)
-    (move first)
+(defun silent-read-card ()
+    (card-function (intern (string-upcase (read-line)))))
+
+(defun silent-read-slot ()
+    (parse-integer (read-line)))
+
+(defun silent-move (side)
+    (with-applications-limit
+        (zombies-turn side))
+    (with-applications-limit
+        (case (parse-integer (read-line))
+            (1 (left-application  side (silent-read-card) (silent-read-slot)))
+            (2 (right-application side (silent-read-slot) (silent-read-card)))
+            (t (error "wrong command")))))
+
+(defun silent-move-from-command (side cmd)
+    (with-applications-limit
+        (zombies-turn side))
+    (with-applications-limit
+        (case (first cmd)
+            (left (left-application   side (card-function (second cmd)) (third cmd)))
+            (right (right-application side (third cmd) (card-function (second cmd))))
+            (t (error "wrong command")))))
+
+;;(defun game-loop (first second)
+;;    (move first)
+;;    (incf *cur-turn*)
+;;    (move second)
+;;    (game-loop first second))
+
+;; (defun main ()
+;;   (setf *cur-turn* 0)
+;;   (if (string= (first #+:clisp *args* #+:sbcl sb-ext:*posix-argv*) "1")
+;;       (game-loop *opponent* *proponent*)
+;;       (game-loop *proponent* *opponent*)))
+
+(defun game-loop (&optional (read-opponent t))
+  (when read-opponent
+    (format *error-output* "Reading opponent command~%")
+    (silent-move *opponent*))
+  (format *error-output* "Ok opponent command -~A~%" *last-application*)
+  (let ((cmd (get-next-command)))
+    (format *error-output* "Player command : ~A, turn ~A~%" cmd *cur-turn*)
+    (silent-move-from-command *proponent* cmd)
+    (print-command cmd))
+  (when (< *cur-turn* *max-turns*)
     (incf *cur-turn*)
-;    (move second)
-    (game-loop first second))
+    (game-loop)))
 
 (defun main ()
-  (setf *cur-turn* 0)
-  (if (string= (first #+:clisp *args* #+:sbcl sb-ext:*posix-argv*) "1")
-      (game-loop *opponent* *proponent*)
-      (game-loop *proponent* *opponent*)))
+   (setf *cur-turn* 0)
+   (format *error-output* "Running main with args ~A~%" sb-ext:*posix-argv*)
+   (ignore-errors
+     (if (string= (second sb-ext:*posix-argv*) "0")
+       (game-loop nil)
+       (game-loop))))
 
-(main)
+;(main)

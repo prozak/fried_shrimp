@@ -76,8 +76,10 @@
                 term)
   nil)
 
-(defvar *combinator-form-dump* "/home/myth/projects/icfp2011/icfp-2011/comb-dump.txt")
-(defvar *compiled-form-dump* "/home/myth/projects/icfp2011/icfp-2011/prog-dump.txt")
+;;(defvar *combinator-form-dump* "/home/myth/projects/icfp2011/icfp-2011/comb-dump.txt")
+;;(defvar *compiled-form-dump* "/home/myth/projects/icfp2011/icfp-2011/prog-dump.txt")
+(defvar *combinator-form-dump* nil)
+(defvar *compiled-form-dump* nil)
 
 (defun compile-lambda-to-combinators (term)
   (labels ((compile-node (node)
@@ -270,16 +272,18 @@
 (defun compile-lambda-1 (term &key (target-slot 1))
   (compile-combinators-to-program (compile-lambda-to-combinators (canon-lambda (compile-all-ints (macro-expand-lambda term)))) target-slot))
 
+(defun print-command (cmd)
+  (case (first cmd)
+    (left (format t "1~%~A~%~A~%" (show-card (second cmd)) (third cmd)))
+    (right (format t "2~%~A~%~A~%" (third cmd) (show-card (second cmd))))))
+
 (defun print-program (program fname)
   (with-open-file (*standard-output*
                    fname
                    :direction :output
                    :if-does-not-exist :create
                    :if-exists :supersede)
-    (mapc (lambda (cmd)
-            (case (first cmd)
-              (left (format t "1~%~A~%~A~%" (show-card (second cmd)) (third cmd)))
-              (right (format t "2~%~A~%~A~%" (third cmd) (show-card (second cmd))))))
+    (mapc #'print-command
           program)))
 
 ;; Program that is able to run a command on two slots
