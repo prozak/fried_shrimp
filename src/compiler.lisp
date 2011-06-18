@@ -1,3 +1,5 @@
+(declaim (special *debug*))
+
 (defun debug-format (&rest args)
 	(when *debug*
 		(apply #'format (cons t args))))
