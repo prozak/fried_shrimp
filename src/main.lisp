@@ -1,6 +1,6 @@
 (declaim (special *cur-turn*))
 
-(defvar *debug* nil)
+(defvar *debug* t)
 (defvar *current-task* nil)
 
 (defstruct task
@@ -46,7 +46,7 @@
     (destructuring-bind (tmp-slot) (find-slots *proponent* :slots-number 1
                                                            :score-fn #'slot-score
                                                            :not-use-list (list slot-number))
-        (debug-format ">>> ~A ~A ~A~%" slot-number amount tmp-slot)
+        (debug-format "Making health booster ~A ~A~%" slot-number amount)
         (make-task :commands-list
                     (compile-lambda
                         `(progn (set ,tmp-slot (loop zz (help ',slot-number ,(if (= 0 slot-number)
@@ -63,6 +63,7 @@
 (defun make-attack-task (attacker-slot-number attacked-slot-number amount)
     (destructuring-bind (tmp-slot) (find-slots *proponent* :slots-number 1
                                                            :score-fn #'slot-score)
+        (debug-format "Making attacker ~A ~A ~A~%" attacker-slot-number  attacked-slot-number amount)
         (make-task :commands-list
                     (compile-lambda
                         `(attack ',attacker-slot-number ',(- 255 attacked-slot-number) ',amount)
@@ -97,25 +98,141 @@
                             :score-fn (lambda (slot index)
                                         (let ((v (slot-vitality slot))
                                               (d (num-difficulty index)))
-                                            (when (> v 0)
+                                            (when (and (> v 0) (> index 0))
                                                 (+ (/ v 100) (- 16 d)))))
                             :test-fn #'>)))
 
+(defun make-helper-task (helper-slot-number helped-slot-number amount)
+    (destructuring-bind (tmp-slot) (find-slots *proponent* :slots-number 1
+                                                           :score-fn #'slot-score)
+        (debug-format "Making helper ~A ~A ~A~%" helper-slot-number  helped-slot-number amount)
+        (make-task :commands-list
+                    (compile-lambda
+                        `(help ',helper-slot-number ',helped-slot-number ',amount)
+                        :target-slot tmp-slot
+                        :prealloc-slots (append (list tmp-slot)
+                                                (find-slots *proponent*
+                                                            :score-fn (lambda (slot i) (when (dead? slot) 1)))))
+                    :required-slots (list tmp-slot helper-slot-number helped-slot-number)
+                    :complete-check-function (lambda () (let ((v (slot-vitality (get-slot *proponent* helper-slot-number)))
+                                                              (v2 (slot-vitality (get-slot *proponent* helped-slot-number))))
+                                                          (and (> v2 0)
+                                                               (> v amount)))))))
+
+(defun find-helper-slot (player)
+    (car (find-slots player :slots-number 1
+                            :score-fn (lambda (slot index)
+                                        (let ((v (slot-vitality slot))
+                                              (d (num-difficulty index)))
+                                            (when (and (> v 0) (> index 0))
+                                                (+ (/ v 100) (- 16 d)))))
+                            :test-fn #'>)))
+
+(defun make-reviver-task (revive-slot-number)
+    (destructuring-bind (tmp-slot) (find-slots *proponent* :slots-number 1
+                                                           :score-fn #'slot-score)
+        (debug-format "Making reviver ~A~%" revive-slot-number)
+        (make-task :commands-list
+                    (compile-lambda
+                        `(revive ',revive-slot-number)
+                        :target-slot tmp-slot
+                        :prealloc-slots (append (list tmp-slot)
+                                                (find-slots *proponent*
+                                                            :score-fn (lambda (slot i) (when (dead? slot) 1)))))
+                    :required-slots (list tmp-slot revive-slot-number)
+                    :complete-check-function (lambda () (let ((v (slot-vitality (get-slot *proponent* revive-slot-number))))
+                                                          (<= v 0))))))
+(defun find-slot-to-revive (player)
+    (car (find-slots player :slots-number 1
+                            :score-fn (lambda (slot index)
+                                        (let ((v (slot-vitality slot))
+                                              (d (num-difficulty index)))
+                                            (when (<= v 0)
+                                                d)))
+                            :test-fn #'>)))
+
+(defun find-slot-that-needs-healing (player)
+    (car (find-slots player :slots-number 1
+                            :score-fn (lambda (slot index)
+                                        (let ((v (slot-vitality slot))
+                                              (d (num-difficulty index)))
+                                            (when (and (> v 0) (<= v 1000))
+                                                (+ (/ v 100) d)))))))
+
+(defun need-to-kill-zero-slot (player)
+  (> (slot-vitality (get-slot player 0))
+     0))
+
+(defun need-to-heal-zero-slot (player)
+  (<= (slot-vitality (get-slot player 0))
+     2000))
+
+(defun need-to-boost-zero-slot (player)
+  (<= (slot-vitality (get-slot player 0))
+     30000))
+
+(defun make-attacker (&optional (slot (find-attacker-slot *proponent*)))
+  (let* ((attacker slot)
+         (attacked (find-slot-to-attack *opponent*))
+         (attacker-v (slot-vitality (get-slot *proponent* attacker)))
+         (attacked-v (slot-vitality (get-slot *opponent* attacked))))
+    (when (and attacker attacked)
+      (make-attack-task attacker attacked (if (< attacker-v (truncate (* attacked-v 10/9)))
+                                              (truncate (* attacker-v 0.9))
+                                              attacked-v)))))
+
+(defun make-helper (&optional (slot (find-slot-to-heal *proponent*)))
+  (let* ((helper (find-helper-slot *proponent*))
+         (healed slot)
+         (helper-v (slot-vitality (get-slot *proponent* helper)))
+         (healed-v (slot-vitality (get-slot *proponent* healed))))
+    (when (and helper healed)
+      (make-helper-task helper healed (if (< helper-v (truncate (* healed-v 10/11)))
+                                          (truncate (* helper-v 0.9))
+                                          (truncate (* helper-v 0.5)))))))
+
+(defun make-health-booster (&optional (slot (find-slot-to-heal *proponent*)))
+    (let ((slot-to-heal slot))
+        (when slot-to-heal
+          (make-health-booster-task slot-to-heal (1- (slot-vitality (get-slot *proponent* slot-to-heal)))))))
+
+(defconstant +heal-ratio+ 30)
 
 (defun select-task ()
     ;; (let ((slot-to-heal (find-slot-to-heal *proponent*)))
     ;;     (if slot-to-heal
     ;;        (make-health-booster-task slot-to-heal (1- (slot-vitality (get-slot *proponent* slot-to-heal))))
     ;;        (list 'left 'I 0)))
-  (let* ((attacker (find-attacker-slot *proponent*))
-         (attacked (find-slot-to-attack *opponent*))
-         (attacker-v (slot-vitality (get-slot *proponent* attacker)))
-         (attacked-v (slot-vitality (get-slot *opponent* attacked))))
-    (if (and attacker attacked)
-        (make-attack-task attacker attacked (if (< attacker-v (truncate (* attacked-v 10/9)))
-                                                (truncate (* attacker-v 0.9))
-                                                attacked-v))
+  (let* ((revive (find-slot-to-revive *proponent*))
+         (to-heal (find-slot-that-needs-healing *proponent*))
+         (rnd (random 100))
+         (cmd (or (and (and revive (= revive 0))
+                       (make-reviver-task revive))
+                  (and (and (< rnd 15)
+                            (need-to-kill-zero-slot *opponent*))
+                       (make-attacker 0))
+                  (and (need-to-heal-zero-slot *proponent*)
+                       (make-helper 0))
+                  (and (and (< rnd +heal-ratio+)
+                            revive)
+                       (make-reviver-task revive))
+                  (and (and (< rnd +heal-ratio+)
+                            (and to-heal (/= 0 to-heal)))
+                       (make-helper to-heal))
+                  (and (and (< rnd +heal-ratio+)
+                            (need-to-boost-zero-slot *proponent*))
+                       (make-health-booster 0))
+                  (and (< rnd +heal-ratio+)
+                       (make-health-booster))
+                  (make-attacker))))
+    (if cmd
+        cmd
         (list 'left 'I 0))))
+    
+          
+        
+;;       ))
+
 ;    (if *last-application*
 ;        (make-task :commands-list (list *last-application*))
 ;        (make-task :commands-list (list (list 'left 'I 0)))))
