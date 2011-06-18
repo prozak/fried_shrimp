@@ -2,7 +2,7 @@
 
 (defun debug-format (&rest args)
 	(when *debug*
-		(apply #'format (cons t args))))
+		(apply #'format (cons *error-output* args))))
 
 (defun everything (func tree)
   (funcall func (if (listp tree)
@@ -81,10 +81,10 @@
                 term)
   nil)
 
-;;(defvar *combinator-form-dump* "/home/myth/projects/icfp2011/icfp-2011/comb-dump.txt")
-;;(defvar *compiled-form-dump* "/home/myth/projects/icfp2011/icfp-2011/prog-dump.txt")
-(defvar *combinator-form-dump* nil)
-(defvar *compiled-form-dump* nil)
+(defvar *combinator-form-dump* "comb-dump.txt")
+(defvar *compiled-form-dump*   "prog-dump.txt")
+;;(defvar *combinator-form-dump* nil)
+;;(defvar *compiled-form-dump* nil)
 
 (defun compile-lambda-to-combinators (term)
   (labels ((compile-node (node)

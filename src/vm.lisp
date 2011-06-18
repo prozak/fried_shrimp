@@ -51,10 +51,10 @@
 
 (defmacro in-game-check (condition &optional comment &rest comment-params)
   `(unless ,condition
-     ;(format t "BANG: in game check ~A failed~A" ',condition (if ,comment ": " ""))
-     ;(when ,comment
-     ;  (format t ,comment ,@comment-params))
-     ;(format t "~%")
+     (debug-format "BANG: in game check ~A failed~A" ',condition (if ,comment ": " ""))
+     (when ,comment
+       (debug-format ,comment ,@comment-params))
+     (debug-format "~%")
      (error 'game-logic-error)))
 
 (defun cb-call-no-param (combinator-or-num)
@@ -375,6 +375,7 @@
 ;;       (game-loop *proponent* *opponent*)))
 
 (defun game-loop (&optional (read-opponent t))
+  ;;(format t ">> ~A ~A~%" *cur-turn* *max-turns*)
   (when (< *cur-turn* *max-turns*)
       (when read-opponent
         ;(format *error-output* "Reading opponent command~%")
@@ -391,9 +392,9 @@
 (defun main ()
   (setf *cur-turn* 0)
   ;(format *error-output* "Running main with args ~A~%" sb-ext:*posix-argv*)
-  (ignore-errors
+;  (ignore-errors
     (if (string= (second sb-ext:*posix-argv*) "0")
         (game-loop nil)
-        (game-loop))))
+        (game-loop)));)
 
                                         ;(main)

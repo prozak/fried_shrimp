@@ -1,6 +1,6 @@
 (declaim (special *cur-turn*))
 
-(defvar *debug* nil)
+(defvar *debug* t)
 (defvar *current-task* nil)
 
 (defstruct task
@@ -20,11 +20,61 @@
                 (append (task-required-slots task)
                         (get-needed-slots (task-commands-list task))))))
 
+(defun slot-score (slot index)
+    (let ((v (slot-vitality slot))
+          (d (num-difficulty index)))
+        (when (and (> v 0)
+                   (< 0 index)) d)))
+
+(defun find-slots (player &key (slots-number nil) (test-fn #'<) (score-fn (lambda () 1)) (not-use-list nil))
+    (let ((slots (sort
+                    (remove nil
+                        (loop for i from 0 to (1- (length (player-slots player))) collect
+                            (unless (member i not-use-list)
+                                (with-slot (slot player i)
+                                    (let ((score (funcall score-fn slot i)))
+                                        (when score
+                                            (cons score i)))))))
+                    test-fn
+                    :key #'car)))
+        (if slots-number
+            (when (>= (length slots) slots-number)
+                (mapcar #'cdr (subseq slots 0 slots-number)))
+            (mapcar #'cdr slots))))
+
+(defun make-health-booster-task (slot-number amount)
+    (destructuring-bind (tmp-slot) (find-slots *proponent* :slots-number 1
+                                                           :score-fn #'slot-score
+                                                           :not-use-list (list slot-number))
+        (debug-format ">>> ~A ~A ~A~%" slot-number amount tmp-slot)
+        (make-task :commands-list
+                    (compile-lambda
+                        `(progn (set ,tmp-slot (loop zz (help ',slot-number (K ',slot-number zz) ,amount)))
+                                (set 0 (get ',tmp-slot))
+                                (set 0 (0 zero)))
+                        :target-slot tmp-slot
+                        :prealloc-slots (append (list slot-number tmp-slot)
+                                                (find-slots *proponent*
+                                                            :score-fn (lambda (slot i) (when (dead? slot) 1)))))
+                    :required-slots (list slot-number tmp-slot))))
+
+(defun find-slot-to-heal (player)
+    (car (find-slots player :slots-number 1
+                            :score-fn (lambda (slot index)
+                                        (let ((v (slot-vitality slot))
+                                              (d (num-difficulty index)))
+                                            (when (> v 0)
+                                                (+ (/ v 100) d)))))))
+
 (defun select-task ()
-    (if *last-application*
-        (make-task :commands-list (list *last-application*))
-        (make-task :commands-list (list (list 'left 'I 0)))))
-;    (make-task :commands-list (compile-lambda '(progn (set 1 (loop zz (inc zz)))
+    (let ((slot-to-heal (find-slot-to-heal *proponent*)))
+        (if slot-to-heal
+           (make-health-booster-task slot-to-heal (1- (slot-vitality (get-slot *proponent* slot-to-heal))))
+           (list 'left 'I 0))))
+;    (if *last-application*
+;        (make-task :commands-list (list *last-application*))
+;        (make-task :commands-list (list (list 'left 'I 0)))))
+;    (make-task :commands-list (compile-lambda '(progn (set 0 (loop zz (inc zz)))
 ;                                                      (set 0 (get '1))
 ;                                                      (set 0 (0 zero)))
 ;                                              :target-slot 2
