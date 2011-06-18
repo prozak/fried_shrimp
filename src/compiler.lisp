@@ -17,7 +17,7 @@
   (when (listp tree)
     (mapc (lambda (node) (everywhere func node))
           tree))
-    (funcall func tree))
+  (funcall func tree))
 
 ;; Top-down version
 (defun everywhere-1 (func tree)
@@ -59,9 +59,9 @@
                          (not (eq (first node) 'lambda))
                          (>= (length node) 2)) ;;(a b c ..) case
                     (reduce (lambda (body el)
-                                (list body el))
-                              (cddr node)
-                              :initial-value (list (first node) (second node))))
+                              (list body el))
+                            (cddr node)
+                            :initial-value (list (first node) (second node))))
                    (t node))))
     (everything #'canon-node term)))
 
@@ -113,12 +113,12 @@
                           (compile-lambda-to-combinators `(lambda ,(second node) ,(second (third node)))))))))
     (let ((res (compile-node term)))
       (when *combinator-form-dump*
-	(with-open-file (*standard-output*
-			 *combinator-form-dump*
-			 :direction :output
-			 :if-does-not-exist :create
-			 :if-exists :supersede)
-	  (format t "~A" res)))
+        (with-open-file (*standard-output*
+                         *combinator-form-dump*
+                         :direction :output
+                         :if-does-not-exist :create
+                         :if-exists :supersede)
+          (format t "~A" res)))
       res)))
 
 (deflmacro progn (&rest body)
@@ -149,11 +149,11 @@
 
 (defun compile-all-ints (term)
   (everything (lambda (num)
-                  (if (and (listp num)
-                           (eq (first num) 'quote)
-                           (integerp (second num)))
-                      (compile-int (second num))
-                      num))
+                (if (and (listp num)
+                         (eq (first num) 'quote)
+                         (integerp (second num)))
+                    (compile-int (second num))
+                    num))
               term))
 
 (defun show-card (sym)
@@ -206,7 +206,7 @@
          )
         ((eq (first term) 'set) ;; (set slot e)
          ;;(add-command (list 'left 'put (second term)))
-	 (alloc-specific-slot (second term))
+         (alloc-specific-slot (second term))
          (compile-combinators-to-program-1 (third term) (second term)))
         ;; ((and (atom (first term))
         ;;       (atom (second term))) ;; (card1 card2)
@@ -220,22 +220,22 @@
          (compile-combinators-to-program-1 (first term) target-slot-num)
          (add-command (list 'right (second term) target-slot-num term)))
         ((= target-slot-num 0) ;; (E1 E2) in slot 0, which is a special case
-                               ;; because we need slot 0 for E2
+         ;; because we need slot 0 for E2
          (let ((tmp-slot (alloc-slot)))
-	   (compile-combinators-to-program-1 term tmp-slot)
-	   (compile-move tmp-slot 0)
-	   (free-slot tmp-slot)))
+           (compile-combinators-to-program-1 term tmp-slot)
+           (compile-move tmp-slot 0)
+           (free-slot tmp-slot)))
         (t  ;; (E1 E2)
          (let ((tmp-slot (alloc-slot)))
-	   (compile-combinators-to-program-1 (first term) target-slot-num)
-	   (compile-move 0 tmp-slot)
-	   (compile-combinators-to-program-1 (second term) 0)
-	   (add-command `(left K ,target-slot-num))
-	   (add-command `(left S ,target-slot-num))
-	   (add-command `(right get ,target-slot-num))
-	   (add-command `(right zero ,target-slot-num ,term))
-	   (compile-move tmp-slot 0)
-	   (free-slot tmp-slot)))))
+           (compile-combinators-to-program-1 (first term) target-slot-num)
+           (compile-move 0 tmp-slot)
+           (compile-combinators-to-program-1 (second term) 0)
+           (add-command `(left K ,target-slot-num))
+           (add-command `(left S ,target-slot-num))
+           (add-command `(right get ,target-slot-num))
+           (add-command `(right zero ,target-slot-num ,term))
+           (compile-move tmp-slot 0)
+           (free-slot tmp-slot)))))
 
 (defun compile-combinators-to-program (term &optional (target-slot-num nil))
   (let ((*current-program* nil))
@@ -249,24 +249,24 @@
   (init-free-slots)
   (mapc #'alloc-specific-slot prealloc-slots)
   (let ((res (if (and (listp term)
-		      (eq (first term) 'progn)) ;; Top level 'progn' optimization
-		 (apply #'append
-			(mapcar (lambda (sub-term)
-				  (compile-lambda-1 sub-term :target-slot target-slot))
-				(cdr term)))
-		 (compile-lambda-1 term :target-slot target-slot)))
-	(cnt -1))
+                      (eq (first term) 'progn)) ;; Top level 'progn' optimization
+                 (apply #'append
+                        (mapcar (lambda (sub-term)
+                                  (compile-lambda-1 sub-term :target-slot target-slot))
+                                (cdr term)))
+                 (compile-lambda-1 term :target-slot target-slot)))
+        (cnt -1))
     (when *compiled-form-dump*
       (with-open-file (*standard-output*
-		       *compiled-form-dump*
-		       :direction :output
-		       :if-does-not-exist :create
-		       :if-exists :supersede)
-	(mapc (lambda (cmd)
-		(case (first cmd)
-		  (left (format t "~A: left ~A ~A ;; ~A~%" (incf cnt) (show-card (second cmd)) (third cmd) (if (fourth cmd) (fourth cmd) "" )))
-		  (right (format t "~A: right ~A ~A ;; ~A~%" (incf cnt) (third cmd) (show-card (second cmd)) (if (fourth cmd) (fourth cmd) "" )))))
-	      res))
+                       *compiled-form-dump*
+                       :direction :output
+                       :if-does-not-exist :create
+                       :if-exists :supersede)
+        (mapc (lambda (cmd)
+                (case (first cmd)
+                  (left (format t "~A: left ~A ~A ;; ~A~%" (incf cnt) (show-card (second cmd)) (third cmd) (if (fourth cmd) (fourth cmd) "" )))
+                  (right (format t "~A: right ~A ~A ;; ~A~%" (incf cnt) (third cmd) (show-card (second cmd)) (if (fourth cmd) (fourth cmd) "" )))))
+              res))
       res)))
 
 (defun compile-lambda-1 (term &key (target-slot 1))
@@ -287,4 +287,17 @@
           program)))
 
 ;; Program that is able to run a command on two slots
-;;(print-program (compile-lambda '(progn (set 1 (loop zz (inc (K '10 zz)))) (set 0 (get '1)) (set 1 (loop zz (inc (K '11 zz)))) (set 1 (1 zero))) :target-slot 2 :prealloc-slots '(1)) "/home/myth/projects/icfp2011/icfp-2011/example.input")
+;;(print-program (compile-lambda 
+;; '(progn 
+;;   (set 1 (loop zz (inc (K '10 zz)))) 
+;;   (set 0 (get '1))
+;;   (set 1 (loop zz (inc (K '11 zz))))
+;;   (set 1 (1 zero)))
+;; :target-slot 2 :prealloc-slots '(1)) "/home/myth/projects/icfp2011/icfp-2011/example.input")
+
+;;(print-program (compile-lambda 
+;; '(progn 
+;;   (set 1 (loop zz (help zz zz 8192))) 
+;;   (set 0 (get '1))
+;;   (set 0 (0 zero)))
+;; :target-slot 2 :prealloc-slots '(1)) "/home/myth/projects/icfp2011/icfp-2011/example.input")
