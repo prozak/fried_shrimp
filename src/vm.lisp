@@ -21,7 +21,7 @@
                                           (declare (ignore _))
                                           (let ((spec (cb-spec self))
                                                 (params (cb-params self)))
-                                            (format stream "@~A~A"
+                                            (format stream "~A~A"
                                                     (cs-name spec)
                                                     (if params
                                                         (append (reverse params)
@@ -36,14 +36,14 @@
   (make-combinator :spec (cb-spec combinator)
                    :params params))
 
-                                        ; defines '@' to be used to create new combinator instance, the syntax is:
-                                        ;   @<some combinator defined by 'defcombinator'>
+; defines '@' to be used to create new combinator instance, the syntax is:
+;   @<some combinator defined by 'defcombinator'>
 (eval-when (:load-toplevel :compile-toplevel :execute)
   (set-macro-character #\@ (lambda (stream char)
                              (declare (ignore char))
                              (list 'make-combinator ':spec `(gethash ',(read stream t nil t) *combinators*)))))
 
-                                        ; raised for 'errors' specified in the doc
+; raised for 'errors' specified in the doc
 (define-condition game-logic-error (error) ())
 
 (defun $p (comb &rest params)
@@ -72,7 +72,7 @@
   (in-game-check (< (incf *current-move-applications-count*)
                     *max-move-applications-number*)
                  "in call to cb-call")
-  (debug-format "cb-call ~A ~A~%" combinator param)
+  ;;(debug-format "cb-call ~A ~A~%" combinator param)
   ;; Aaaaa
   ;;(push (cb-call-no-param param) (cb-params combinator))
   (let* ((spec                (cb-spec combinator))
@@ -141,7 +141,16 @@
        (setf (aref array i) (funcall func)))
   array)
 
-(defstruct player
+(defstruct (player
+                (:print-function (lambda (self stream _)
+                                    (declare (ignore _))
+                                    (loop for i from 0 to (1- (length (player-slots self))) do
+                                        (let ((slot (aref (player-slots self) i)))
+                                            (unless (and (eq (slot-vitality slot) *init-live*)
+                                                         (typep (slot-field slot) 'combinator)
+                                                         (eq (cs-name (cb-spec (slot-field slot)))
+                                                             'I))
+                                                (format stream "~A>> ~A=~A~%" *cur-turn* i slot)))))))
   (slots (fill-array (make-array *max-slots* :element-type 'ltg-slot) #'make-ltg-slot)))
 
 (defparameter *proponent* (make-player))
@@ -347,7 +356,11 @@
 (defun silent-read-slot ()
   (parse-integer (read-line)))
 
+(defun print-player (side)
+  (debug-format "[~A] ~A~%" (if (eq side *proponent*) "proponent" "opponent") side))
+
 (defun silent-move (side)
+  (print-player side)
   (with-applications-limit
     (zombies-turn side))
   (with-applications-limit
@@ -357,6 +370,7 @@
       (t (error "wrong command")))))
 
 (defun silent-move-from-command (side cmd)
+  (print-player side)
   (with-applications-limit
     (zombies-turn side))
   (with-applications-limit
