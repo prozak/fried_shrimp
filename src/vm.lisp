@@ -254,6 +254,7 @@
   (with-slot (slot-i *proponent* i)
     (let ((v (slot-vitality slot-i)))
       (in-game-check (and (integerp n) (<= n v)) "in call to help, n is ~A, v is ~A" n v)
+      (setf (slot-vitality slot-i) (- v n))
       (with-slot (slot-j *proponent* j)
         (when (alive? slot-j)
           (let ((w (slot-vitality slot-j))
@@ -267,6 +268,8 @@
                 (if (< (- w heal) 0)
                     (setf (slot-vitality slot-j) 0)
                     (setf (slot-vitality slot-j) (- w heal))))
+                ;(debug-format ">>>>>>> i: ~A j: ~A n: ~A w: ~A -> ~A v: ~A -> ~A t: ~A~%"
+                ;    i j n w (slot-vitality slot-j) v (slot-vitality slot-i) *current-move-applications-count*)
             )))))
   @I)
 
