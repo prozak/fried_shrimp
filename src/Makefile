@@ -27,12 +27,14 @@ sent:
 	mkdir -p sent/src
 	cp *.lisp sent/src
 	cp Makefile sent/src
-	echo "#!/bin/sh\n" > sent/install
+	echo "#!/bin/sh" > sent/install
+	echo "" >> sent/install
 	echo "cd src" >> sent/install
 	echo "make" >> sent/install
 	echo "cd .." >> sent/install
 	chmod u+x sent/install
-	echo "#!/bin/sh\n" > sent/run
+	echo "#!/bin/sh" > sent/run
+	echo "" >> sent/run
 	echo "src/fried_shrimp \$$1" >> sent/run
 	chmod u+x sent/run
 	cd sent; tar czf sent.tar.gz *
