@@ -74,6 +74,14 @@
                          (declare (ignore _))
                          (debug-format "Compilation of task ~A ~A failed~%" ',name (list ,@params))
                          nil)))))))))
+
+(defun value-complexity (val)
+  (if (integerp val)
+      1
+      (if (typep val 'combinator)
+          (1+ (apply #'+ (mapcar #'value-complexity (cb-params val))))
+          0)))
+
 ;(print (macroexpand-1
 (deftask make-health-booster-task (slot-number amount)
                                   use (tmp-slot)
@@ -377,7 +385,9 @@
              (could-complete? *proponent* *current-task*))
         (pop (task-commands-list *current-task*))
         (progn
-            (setf *current-task* (select-task))
+            (setf *current-task* (ignore-errors (select-task)))
+            (unless *current-task*
+              (setf *current-task* (make-task :commands-list (list (list 'left 'I 0)))))
             ;(format t "gnc: task after selection: ~A, complete? ~A, could complete? ~A~%"
             ;     *current-task*
             ;     (task-complete? *current-task*)
