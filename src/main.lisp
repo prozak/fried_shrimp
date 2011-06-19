@@ -3,6 +3,7 @@
 (defvar *debug* nil)
 (defvar *current-task* nil)
 (defvar *print-stat* nil)
+(defvar *ignore-all-errors* t)
 
 (defstruct task
     commands-list   ; rest of the commands to do
@@ -402,7 +403,9 @@
                 could-complete))
         (pop (task-commands-list *current-task*))
         (progn
-            (setf *current-task* (ignore-errors (select-task)))
+            (setf *current-task* (if *ignore-all-errors*
+                                    (ignore-errors (select-task))
+                                    (select-task)))
             (unless *current-task*
               (setf *current-task* (make-task :commands-list (list (list 'left 'I 0)))))
             ;(format t "gnc: task after selection: ~A, complete? ~A, could complete? ~A~%"
