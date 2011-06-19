@@ -363,7 +363,7 @@
   (debug-format "[~A] ~A~%" (if (eq side *proponent*) "proponent" "opponent") side))
 
 (defun silent-move (side)
-  (print-player side)
+  ;(print-player side)
   (with-applications-limit
     (zombies-turn side))
   (with-applications-limit
@@ -373,7 +373,7 @@
       (t (error "wrong command")))))
 
 (defun silent-move-from-command (side cmd)
-  (print-player side)
+  ;(print-player side)
   (with-applications-limit
     (zombies-turn side))
   (with-applications-limit
