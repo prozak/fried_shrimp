@@ -240,7 +240,7 @@
     (when (and attacker attacked)
       (make-attack-task attacker attacked (if (< attacker-v (truncate (* attacked-v 10/9)))
                                               (truncate (* attacker-v 0.9))
-                                              attacked-v)))))
+                                              (ceiling (* attacked-v 10/9)))))))
 
 (defun make-helper (&optional (slot (find-slot-to-heal *proponent*)))
   (let* ((helper (find-helper-slot *proponent*))
