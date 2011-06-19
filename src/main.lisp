@@ -44,7 +44,9 @@
 
 (defmacro deftask (name (&rest params) use     (&rest slots)
                                        not-use (&rest not-use-list)
-                        commands-list)
+                        commands-list 
+                   &key (complete-check-function '(lambda () t)))
+     (declare (ignore use not-use))
     ;(assert slots t "deftask requires at least one slot parameter")
     `(defun ,name (,@params)
        (let ,slots
@@ -56,8 +58,10 @@
                                         :prealloc-slots
                                             (append (list ,@not-use-list ,@slots)
                                                     (find-slots *proponent*
-                                                                :score-fn (lambda (slot i) (when (dead? slot) 1)))))
-                       :required-slots (list ,@slots))))))
+                                                                :score-fn (lambda (slot i) (declare (ignore i)) 
+                                                                                  (when (dead? slot) 1)))))
+                       :required-slots (list ,@slots)
+                       :complete-check-function ,complete-check-function)))))
 ;(print (macroexpand-1
 (deftask make-health-booster-task (slot-number amount)
                                   use (tmp-slot)
@@ -87,6 +91,16 @@
                     :required-slots (list slot-number tmp-slot))))
 |#
 
+(deftask make-attack-task (attacker-slot-number attacked-slot-number amount)
+                            use (tmp-slot)
+                            not-use nil
+      `(attack ',attacker-slot-number ',(- 255 attacked-slot-number) ',amount)
+      :complete-check-function (lambda () (let ((v (slot-vitality (get-slot *opponent* attacked-slot-number)))
+                                                (v2 (slot-vitality (get-slot *proponent* attacker-slot-number))))
+                                            (and (> v 0)
+                                                 (> v2 amount)))))
+
+#|
 (defun make-attack-task (attacker-slot-number attacked-slot-number amount)
     (destructuring-bind (tmp-slot) (find-slots *proponent* :slots-number 1
                                                            :score-fn #'slot-score)
@@ -103,7 +117,7 @@
                                                               (v2 (slot-vitality (get-slot *proponent* attacker-slot-number))))
                                                           (and (> v 0)
                                                                (> v2 amount)))))))
-
+|#
 (defun find-slot-to-heal (player)
     (car (find-slots player :slots-number 1
                             :score-fn (lambda (slot index)
@@ -129,6 +143,15 @@
                                                 (+ (/ v 100) (- 16 d)))))
                             :test-fn #'>)))
 
+(deftask make-helper-task (helper-slot-number helped-slot-number amount)
+                          use (tmp-slot)
+                          not-use nil
+              `(help ',helper-slot-number ',helped-slot-number ',amount)
+              :complete-check-function (lambda () (let ((v (slot-vitality (get-slot *proponent* helper-slot-number)))
+                                                        (v2 (slot-vitality (get-slot *proponent* helped-slot-number))))
+                                                    (and (> v2 0)
+                                                         (> v amount)))))
+#|
 (defun make-helper-task (helper-slot-number helped-slot-number amount)
     (destructuring-bind (tmp-slot) (find-slots *proponent* :slots-number 1
                                                            :score-fn #'slot-score)
@@ -145,6 +168,7 @@
                                                               (v2 (slot-vitality (get-slot *proponent* helped-slot-number))))
                                                           (and (> v2 0)
                                                                (> v amount)))))))
+|#
 
 (defun find-helper-slot (player)
     (car (find-slots player :slots-number 1
@@ -155,6 +179,14 @@
                                                 (+ (/ v 100) (- 16 d)))))
                             :test-fn #'>)))
 
+(deftask make-reviver-task (revive-slot-number)
+                           use (tmp-slot)
+                           not-use nil
+                           `(revive ',revive-slot-number)
+                           :complete-check-function (lambda () (let ((v (slot-vitality (get-slot *proponent* revive-slot-number))))
+                                                                 (<= v 0))))
+
+#|
 (defun make-reviver-task (revive-slot-number)
     (destructuring-bind (tmp-slot) (find-slots *proponent* :slots-number 1
                                                            :score-fn #'slot-score)
@@ -169,6 +201,8 @@
                     :required-slots (list tmp-slot revive-slot-number)
                     :complete-check-function (lambda () (let ((v (slot-vitality (get-slot *proponent* revive-slot-number))))
                                                           (<= v 0))))))
+|#
+
 (defun find-slot-to-revive (player)
     (car (find-slots player :slots-number 1
                             :score-fn (lambda (slot index)
