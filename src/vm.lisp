@@ -430,6 +430,8 @@
 ;;       (game-loop *opponent* *proponent*)
 ;;       (game-loop *proponent* *opponent*)))
 
+(declaim (special *get-next-command-call-count*))
+
 (defun game-loop (&optional (read-opponent t))
   ;(format *error-output* ">> ~A ~A~%" *cur-turn* *max-turns*)
   (when (and (< *cur-turn* *max-turns*)
@@ -443,7 +445,8 @@
       (when (and (find-slot-to-heal *opponent*)
                  (find-slot-to-heal *proponent*))
           ;(format *error-output* "Ok opponent command -~A~%" *last-application*)
-          (let ((cmd (get-next-command)))
+          (let ((cmd (let ((*get-next-command-call-count* 0))
+                       (get-next-command))))
             ;(format *error-output* "Player command : ~A, turn ~A~%" cmd *cur-turn*)
             (silent-move-from-command *proponent* cmd)
             (handler-case (print-command cmd)
@@ -461,7 +464,6 @@
   (handler-case (if (string= (second sb-ext:*posix-argv*) "0")
                     (game-loop nil)
                     (game-loop))
-    (stream-error (_) (declare (ignore _))))
-  (print-task-stat))
+    (stream-error (_) (declare (ignore _)))))
 
                                         ;(main)
