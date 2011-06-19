@@ -461,6 +461,7 @@
   (handler-case (if (string= (second sb-ext:*posix-argv*) "0")
                     (game-loop nil)
                     (game-loop))
-    (stream-error (_) (declare (ignore _)))))
+    (stream-error (_) (declare (ignore _))))
+  (print-task-stat))
 
                                         ;(main)

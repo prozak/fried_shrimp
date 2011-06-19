@@ -2,11 +2,13 @@
 
 (defvar *debug* nil)
 (defvar *current-task* nil)
+(defvar *print-stat* nil)
 
 (defstruct task
     commands-list   ; rest of the commands to do
     required-slots
-    (complete-check-function (lambda () t)))
+    (complete-check-function (lambda () t))
+    name)
 
 (defun task-complete? (task)
     (null (task-commands-list task)))
@@ -42,38 +44,50 @@
                 (mapcar #'cdr (subseq slots 0 slots-number)))
             (mapcar #'cdr slots))))
 
+(defvar *task-stat-list* (make-hash-table))
+
+(defun print-task-stat ()
+    (when *print-stat*
+        (maphash (lambda (k v)
+                    (format *error-output* "~A called: ~A interupted: ~A~%" k (first v) (second v)))
+                 *task-stat-list*)))
+
 (defmacro deftask (name (&rest params) use      (&rest slots)
                                        not-use  (&rest not-use-list)
                                        required (&rest req-slots)
                         commands-list 
                    &key (complete-check-function '(lambda () t)))
-     (declare (ignore use not-use required))
+    (declare (ignore use not-use required))
     ;(assert slots t "deftask requires at least one slot parameter")
     (let ((tmp-list (gensym)))
-      `(defun ,name (,@params)
-         (let ,slots
-           (let ((,tmp-list (find-slots *proponent* 
-                                        :slots-number ,(length slots)
-                                        :score-fn #'slot-score
-                                        :not-use-list (list ,@not-use-list ,@slots)))) 
-               (if (< (length ,tmp-list)
-                      ,(length slots)) 
-                   nil
-                   (destructuring-bind (,@slots) ,tmp-list
-                     (handler-case
-                         (make-task :commands-list (compile-lambda ,commands-list
-                                                                   :target-slot ,(car slots)
-                                                                   :prealloc-slots
-                                                                   (append (list ,@not-use-list ,@slots)
-                                                                           (find-slots *proponent*
-                                                                                       :score-fn (lambda (slot i) (declare (ignore i)) 
-                                                                                                         (when (dead? slot) 1)))))
-                                    :required-slots (list ,@slots ,@req-slots)
-                                    :complete-check-function ,complete-check-function)
-                       (compile-error (_) 
-                         (declare (ignore _))
-                         (debug-format "Compilation of task ~A ~A failed~%" ',name (list ,@params))
-                         nil)))))))))
+      `(let ()
+           (setf (gethash ',name *task-stat-list*) (list 0 0))
+           (defun ,name (,@params)
+             (incf (first (gethash ',name *task-stat-list*)))
+             (let ,slots
+               (let ((,tmp-list (find-slots *proponent* 
+                                            :slots-number ,(length slots)
+                                            :score-fn #'slot-score
+                                            :not-use-list (list ,@not-use-list ,@slots)))) 
+                   (if (< (length ,tmp-list)
+                          ,(length slots)) 
+                       nil
+                       (destructuring-bind (,@slots) ,tmp-list
+                         (handler-case
+                             (make-task :commands-list (compile-lambda ,commands-list
+                                                        :target-slot ,(car slots)
+                                                        :prealloc-slots
+                                                           (append (list ,@not-use-list ,@slots)
+                                                                   (find-slots *proponent*
+                                                                               :score-fn (lambda (slot i) (declare (ignore i)) 
+                                                                                                 (when (dead? slot) 1)))))
+                                        :required-slots (list ,@slots ,@req-slots)
+                                        :complete-check-function ,complete-check-function
+                                        :name ',name)
+                           (compile-error (_) 
+                             (declare (ignore _))
+                             (debug-format "Compilation of task ~A ~A failed~%" ',name (list ,@params))
+                             nil))))))))))
 ;(print (macroexpand-1
 (deftask make-health-booster-task (slot-number amount)
                                   use (tmp-slot)
@@ -374,7 +388,10 @@
     ;(format t "gnc: task is ~A~%" *current-task*)
     (if (and *current-task*
              (not (task-complete? *current-task*))
-             (could-complete? *proponent* *current-task*))
+             (let ((could-complete (could-complete? *proponent* *current-task*)))
+                (unless could-complete
+                    (incf (second (gethash (task-name *current-task*) *task-stat-list*))))
+                could-complete))
         (pop (task-commands-list *current-task*))
         (progn
             (setf *current-task* (select-task))
