@@ -1,6 +1,6 @@
 (declaim (special *cur-turn*))
 
-(defvar *debug* t)
+(defvar *debug* nil)
 (defvar *current-task* nil)
 
 (defstruct task

@@ -142,6 +142,7 @@
   array)
 
 (defstruct (player
+                (:constructor make-player-int)
                 (:print-function (lambda (self stream _)
                                     (declare (ignore _))
                                     (loop for i from 0 to (1- (length (player-slots self))) do
@@ -151,10 +152,24 @@
                                                          (eq (cs-name (cb-spec (slot-field slot)))
                                                              'I))
                                                 (format stream "~A>> ~A=~A~%" *cur-turn* i slot)))))))
-  (slots (fill-array (make-array *max-slots* :element-type 'ltg-slot) #'make-ltg-slot)))
+  (slots (fill-array (make-array *max-slots* :element-type 'ltg-slot) #'make-ltg-slot))
+  dump-fname
+  dump-stream)
 
-(defparameter *proponent* (make-player))
-(defparameter *opponent*  (make-player))
+(defun make-player (&key (dump-fname nil))
+  (let ((pl (make-player-int :dump-fname dump-fname)))
+    (when dump-fname 
+      (setf (player-dump-stream pl)
+            (open dump-fname 
+                  :direction :output
+                  :if-does-not-exist :create
+                  :if-exists :supersede)))
+    pl))
+
+;;(defparameter *proponent* (make-player :dump-fname (concatenate 'string "proponent-dump" (second sb-ext:*posix-argv*) ".txt")))
+;;(defparameter *opponent*  (make-player :dump-fname (concatenate 'string "opponent-dump" (second sb-ext:*posix-argv*) ".txt")))
+(defparameter *proponent* nil)
+(defparameter *opponent*  nil)
 
 (defun get-slot (player slot-number)
   (in-game-check (valid-slot-number? slot-number) "in call to get-slot, slot-number is ~A" slot-number)
@@ -360,10 +375,12 @@
   (parse-integer (read-line)))
 
 (defun print-player (side)
-  (debug-format "[~A] ~A~%" (if (eq side *proponent*) "proponent" "opponent") side))
+  (if (player-dump-stream side)
+      (format (player-dump-stream side) "[~A]~%~A~%" (if (eq side *proponent*) "proponent" "opponent") side)
+      (debug-format "[~A]~%~A~%" (if (eq side *proponent*) "proponent" "opponent") side)))
 
 (defun silent-move (side)
-  ;(print-player side)
+  (print-player side)
   (with-applications-limit
     (zombies-turn side))
   (with-applications-limit
@@ -373,7 +390,7 @@
       (t (error "wrong command")))))
 
 (defun silent-move-from-command (side cmd)
-  ;(print-player side)
+  (print-player side)
   (with-applications-limit
     (zombies-turn side))
   (with-applications-limit
@@ -399,7 +416,9 @@
   (when (< *cur-turn* *max-turns*)
       (when read-opponent
         ;(format *error-output* "Reading opponent command~%")
-        (silent-move *opponent*))
+        (let ((*proponent* *opponent*)
+              (*opponent* *proponent*))
+          (silent-move *proponent*)))
       ;(format *error-output* "Ok opponent command -~A~%" *last-application*)
       (let ((cmd (get-next-command)))
         ;(format *error-output* "Player command : ~A, turn ~A~%" cmd *cur-turn*)
@@ -411,6 +430,8 @@
 
 (defun main ()
   (setf *cur-turn* 0)
+  (setf *proponent* (make-player :dump-fname (when *debug* (concatenate 'string "proponent-dump" (second sb-ext:*posix-argv*) ".txt"))))
+  (setf *opponent*  (make-player :dump-fname (when *debug* (concatenate 'string "opponent-dump" (second sb-ext:*posix-argv*) ".txt"))))
   ;(format *error-output* "Running main with args ~A~%" sb-ext:*posix-argv*)
 ;  (ignore-errors
     (if (string= (second sb-ext:*posix-argv*) "0")
