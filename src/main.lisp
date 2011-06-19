@@ -390,7 +390,8 @@
     (setf *current-task* (make-task :commands-list (list (list 'left 'I 0)))))
   (if (and *current-task*
            (not (task-complete? *current-task*))
-           (could-complete? *proponent* *current-task*))
+           (or (> *get-next-command-call-count* 100)
+               (could-complete? *proponent* *current-task*)))
       (pop (task-commands-list *current-task*))
       (progn
         (setf *current-task* (ignore-errors (select-task)))
