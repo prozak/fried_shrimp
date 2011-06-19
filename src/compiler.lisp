@@ -1,5 +1,7 @@
 (declaim (special *debug*))
 
+(define-condition compile-error (error) ())
+
 (defun debug-format (&rest args)
 	(when *debug*
 		(apply #'format (cons *error-output* args))))
@@ -199,9 +201,13 @@
   (setf *free-slots* (copy-list *sorted-free-slots*)))
 
 (defun alloc-slot ()
-  (let ((res (pop *free-slots*)))
-    ;;(debug-format "Allocated slot ~A~%" res)
-    res))
+  (if *free-slots*
+      (let ((res (pop *free-slots*)))
+        ;;(debug-format "Allocated slot ~A~%" res)
+        res)
+      (progn
+        (debug-format "No more slots to allocate~%")
+        (error 'compile-error))))
 
 (defun alloc-specific-slot (slot)
   ;;(debug-format "Allocated specific slot ~A~%" slot)
