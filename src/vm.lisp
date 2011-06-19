@@ -444,8 +444,9 @@
         (silent-move-from-command *proponent* cmd)
         (handler-case (print-command cmd)
             (stream-error (_) (declare (ignore _)))))
-      (incf *cur-turn*)
-      (game-loop)))
+      (when (find-slot-to-heal *opponent*)
+        (incf *cur-turn*)
+        (game-loop))))
 
 (defun main ()
   (setf *cur-turn* 0)

@@ -134,6 +134,14 @@
                                             (when (> v 0)
                                                 (+ (/ v 100) (- 16 d))))))))
 
+(defun find-slots-to-attack-2 (player num-slots)
+  (find-slots player :slots-number num-slots
+              :score-fn (lambda (slot index)
+                          (let ((v (slot-vitality slot))
+                                (d (num-difficulty index)))
+                            (when (> v 0)
+                              (+ (/ v 100) d))))))
+
 (defun find-attacker-slot (player)
     (car (find-slots player :slots-number 1
                             :score-fn (lambda (slot index)
@@ -186,6 +194,13 @@
                            :complete-check-function (lambda () (let ((v (slot-vitality (get-slot *proponent* revive-slot-number))))
                                                                  (<= v 0))))
 
+(deftask make-zombie-helper-task (zombie-slot-number from-slot-number to-slot-number amount)
+                           use (tmp-slot)
+                           not-use nil
+                           `(zombie ',(- 255 zombie-slot-number) (lambda (id) (help (id ',from-slot-number) ',to-slot-number ',amount)))
+                           :complete-check-function (lambda () (let ((v (slot-vitality (get-slot *opponent* zombie-slot-number))))
+                                                                 (<= v 0))))
+
 #|
 (defun make-reviver-task (revive-slot-number)
     (destructuring-bind (tmp-slot) (find-slots *proponent* :slots-number 1
@@ -209,8 +224,15 @@
                                         (let ((v (slot-vitality slot))
                                               (d (num-difficulty index)))
                                             (when (<= v 0)
-                                                d)))
-                            :test-fn #'>)))
+                                                d))))))
+
+(defun find-slot-to-zombie (player)
+    (car (find-slots player :slots-number 1
+                            :score-fn (lambda (slot index)
+                                        (let ((v (slot-vitality slot))
+                                              (d (num-difficulty index)))
+                                            (when (= v 0)
+                                                (- 16 d)))))))
 
 (defun find-slot-that-needs-healing (player)
     (car (find-slots player :slots-number 1
@@ -234,30 +256,40 @@
 
 (defun make-attacker (&optional (slot (find-attacker-slot *proponent*)))
   (let* ((attacker slot)
-         (attacked (find-slot-to-attack *opponent*))
-         (attacker-v (slot-vitality (get-slot *proponent* attacker)))
-         (attacked-v (slot-vitality (get-slot *opponent* attacked))))
+         (attacked (find-slot-to-attack *opponent*)))
     (when (and attacker attacked)
-      (make-attack-task attacker attacked (if (< attacker-v (truncate (* attacked-v 10/9)))
-                                              (truncate (* attacker-v 0.9))
-                                              (ceiling (* attacked-v 10/9)))))))
+      (let ((attacker-v (slot-vitality (get-slot *proponent* attacker)))
+            (attacked-v (slot-vitality (get-slot *opponent* attacked))))
+        (make-attack-task attacker attacked (if (< attacker-v (truncate (* attacked-v 10/9)))
+                                                (truncate (* attacker-v 0.9))
+                                                (ceiling (* attacked-v 10/9))))))))
 
 (defun make-helper (&optional (slot (find-slot-to-heal *proponent*)))
   (let* ((helper (find-helper-slot *proponent*))
-         (healed slot)
-         (helper-v (slot-vitality (get-slot *proponent* helper)))
-         (healed-v (slot-vitality (get-slot *proponent* healed))))
+         (healed slot))
     (when (and helper healed)
-      (make-helper-task helper healed (if (< helper-v (truncate (* healed-v 10/11)))
-                                          (truncate (* helper-v 0.9))
-                                          (truncate (* helper-v 0.5)))))))
+      (let ((helper-v (slot-vitality (get-slot *proponent* helper)))
+            (healed-v (slot-vitality (get-slot *proponent* healed))))
+        (make-helper-task helper healed (if (< helper-v (truncate (* healed-v 10/11)))
+                                            (truncate (* helper-v 0.9))
+                                            (truncate (* helper-v 0.5))))))))
 
 (defun make-health-booster (&optional (slot (find-slot-to-heal *proponent*)))
     (let ((slot-to-heal slot))
         (when slot-to-heal
           (make-health-booster-task slot-to-heal (1- (slot-vitality (get-slot *proponent* slot-to-heal)))))))
 
-(defconstant +heal-ratio+ 30)
+(defun make-zombier (&optional (slot (find-slot-to-zombie *opponent*)))
+  (let* ((a-slots (find-slots-to-attack-2 *opponent* 2))
+         (helper (first a-slots))
+         (healed (second a-slots)))
+    (when (and helper healed slot)
+      (let ((helper-v (slot-vitality (get-slot *opponent* helper)))
+            (healed-v (slot-vitality (get-slot *opponent* healed))))
+        (make-zombie-helper-task slot helper healed (1- helper-v))))))
+
+(defconstant +heal-ratio+ 20)
+(defconstant +zombie-ratio+ 60)
 
 (defun select-task ()
   (let* ((revive (find-slot-to-revive *proponent*))
@@ -281,6 +313,8 @@
                        (make-health-booster 0))
                   (and (< rnd +heal-ratio+)
                        (make-health-booster))
+                  (and (< rnd +zombie-ratio+)
+                       (make-zombier))
                   (make-attacker))))
     (if cmd
         cmd
