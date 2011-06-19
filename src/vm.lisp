@@ -7,6 +7,12 @@
 (defvar *cur-turn* 0)
 (defvar *max-turns* 100000)
 
+(defvar *debug-commands* nil)
+
+(defun debug-command (fmt &rest params)
+    (when *debug-commands*
+        (apply #'debug-format (cons (concatenate 'string fmt "~%") params))))
+
 (defmacro with-applications-limit (&body body)
   `(let ((*current-move-applications-count* 0))
      ,@body))
@@ -83,6 +89,7 @@
                    ((< actual-params-num required-params-num) 
                     (copy-combinator-with-params combinator params))
                    ((= actual-params-num required-params-num)
+                    ;;(debug-command "cb-call ~A~A" combinator params)
                     (apply (cs-eval-function spec) (reverse params)))
                    (t (debug-format "cb-apply called with more parameters then expected, combinator: ~A" combinator)
                       (error 'game-logic-error)))))
@@ -103,7 +110,8 @@
                          :params-number ,(length params)))
        (setf (gethash ',name *combinators*) ,funname))))
 
-(defcombinator I (x) x)
+(defcombinator I (x)
+    x)
 
 #|
 (defcombinator test (x y z) (format t "test: ~A, ~A, ~A~%" x y z))
@@ -173,7 +181,8 @@
      (in-game-check (alive? ,name) "in call to with-alive-slot")
      ,@body))
 
-(defcombinator zero () 0)
+(defcombinator zero ()
+    0)
 
 (defcombinator succ (n)
   (in-game-check (integerp n) "in call to succ, n is ~A" n)
@@ -189,9 +198,12 @@
 
 (defcombinator get (i)
   (with-alive-slot (slot *proponent* i)
+    (debug-command "get ~A -> ~A" i slot)
     (slot-field slot)))
 
-(defcombinator put (unused) (declare (ignore unused)) @I)
+(defcombinator put (unused)
+    ;(declare (ignore unused))
+    @I)
 
 (defcombinator S (f g x)
   (let* ((h (cb-call f x))
@@ -203,6 +215,7 @@
 
 (defcombinator inc (index)
   (with-slot (slot *proponent* index)
+    (debug-command "inc ~A -> ~A" index slot)
     (if (not *zombies-turn*)
                                         ; normal operation
         (when (and (< (slot-vitality slot) *max-live*)
@@ -219,6 +232,7 @@
 
 (defcombinator dec (i)
   (with-slot (slot *opponent* (wrap-slot i))
+    (debug-command "inc (255 - ~A) -> ~A" i slot)
     (if (not *zombies-turn*)
                                         ; normal operation
         (when (> (slot-vitality slot) 0)
@@ -247,6 +261,8 @@
                 (if (> (+ hit w) *max-live*)
                     (setf (slot-vitality his-slot) *max-live*)
                     (setf (slot-vitality his-slot) (+ hit w))))
+                (debug-command "attack i: ~A j: ~A n: ~A w: ~A -> ~A v: ~A -> ~A"
+                    i j n w (slot-vitality his-slot) v (slot-vitality my-slot))
             )))))
   @I)
 
@@ -268,23 +284,26 @@
                 (if (< (- w heal) 0)
                     (setf (slot-vitality slot-j) 0)
                     (setf (slot-vitality slot-j) (- w heal))))
-                ;(debug-format ">>>>>>> i: ~A j: ~A n: ~A w: ~A -> ~A v: ~A -> ~A t: ~A~%"
-                ;    i j n w (slot-vitality slot-j) v (slot-vitality slot-i) *current-move-applications-count*)
+                (debug-command "help i: ~A j: ~A n: ~A w: ~A -> ~A v: ~A -> ~A"
+                    i j n w (slot-vitality slot-j) v (slot-vitality slot-i))
             )))))
   @I)
 
 (defcombinator copy (i)
   (with-slot (slot *opponent* i)
+    (debug-command "copy ~A -> ~A" i slot)
     (slot-field slot)))
 
 (defcombinator revive (i)
   (with-slot (slot *proponent* i)
+    (debug-command "revive ~A -> ~A" i slot)
     (when (<= (slot-vitality slot) 0)
       (setf (slot-vitality slot) 1)))
   @I)
 
 (defcombinator zombie (i x)
   (with-slot (slot *opponent* (wrap-slot i))
+    (debug-command "zombie (255 - ~A) -> ~A, x = ~A" i slot x)
     (in-game-check (dead? slot) "in call to zombie, i is ~A" i)
     (setf (slot-field slot) x)
     (setf (slot-vitality slot) -1))
