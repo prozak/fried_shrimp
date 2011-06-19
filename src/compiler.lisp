@@ -200,15 +200,15 @@
 
 (defun alloc-slot ()
   (let ((res (pop *free-slots*)))
-    (debug-format "Allocated slot ~A~%" res)
+    ;;(debug-format "Allocated slot ~A~%" res)
     res))
 
 (defun alloc-specific-slot (slot)
-  (debug-format "Allocated specific slot ~A~%" slot)
+  ;;(debug-format "Allocated specific slot ~A~%" slot)
   (setf *free-slots* (remove slot *free-slots* :test #'=)))
 
 (defun free-slot (slot)
-  (debug-format "Freed slot ~A~%" slot)
+  ;;(debug-format "Freed slot ~A~%" slot)
   (push slot *free-slots*))
 
 (defun compile-move (slot-from slot-to)
